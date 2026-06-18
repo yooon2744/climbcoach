@@ -241,10 +241,15 @@ export default function Main() {
 }
 
 function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit }) {
-  const [showComments, setShowComments] = useState(true);
+  const [mediaIdx, setMediaIdx] = useState(0);
+  const [showCommentSheet, setShowCommentSheet] = useState(false);
+
   const comments = item.comments || [];
-  const mediaUrls = item.media_urls?.length > 0 ? item.media_urls
+  const rawUrls = item.media_urls?.length > 0 ? item.media_urls
     : item.video_url ? [item.video_url] : [];
+  // 동영상 먼저
+  const mediaUrls = [...rawUrls].sort((a, b) => (isVideoUrl(b) ? 1 : 0) - (isVideoUrl(a) ? 1 : 0));
+  const currentUrl = mediaUrls[mediaIdx];
 
   return (
     <div className="feed-card">
@@ -257,14 +262,28 @@ function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit
       </div>
 
       {mediaUrls.length > 0 && (
-        <div className={`media-gallery ${mediaUrls.length > 1 ? "multi" : "single"}`}>
-          {mediaUrls.map((url, i) => (
-            isVideoUrl(url) ? (
-              <video key={i} src={url} controls className="gallery-item" playsInline />
-            ) : (
-              <img key={i} src={url} alt="" className="gallery-item" />
-            )
-          ))}
+        <div className="carousel-wrap">
+          {isVideoUrl(currentUrl) ? (
+            <video key={currentUrl} src={currentUrl} controls className="carousel-item" playsInline />
+          ) : (
+            <img key={currentUrl} src={currentUrl} alt="" className="carousel-item" />
+          )}
+          {mediaUrls.length > 1 && (
+            <>
+              {mediaIdx > 0 && (
+                <button className="carousel-btn carousel-left" onClick={() => setMediaIdx(i => i - 1)}>‹</button>
+              )}
+              {mediaIdx < mediaUrls.length - 1 && (
+                <button className="carousel-btn carousel-right" onClick={() => setMediaIdx(i => i + 1)}>›</button>
+              )}
+              <div className="carousel-dots">
+                {mediaUrls.map((_, i) => (
+                  <div key={i} className={`carousel-dot${i === mediaIdx ? " active" : ""}`}
+                    onClick={() => setMediaIdx(i)} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -276,27 +295,42 @@ function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit
 
       <div className="feed-actions">
         <button className="action-btn" onClick={onLike}>🤍 {item.likes}</button>
-        <button className="action-btn" onClick={() => setShowComments(v => !v)}>💬 {comments.length}</button>
+        <button className="action-btn" onClick={() => setShowCommentSheet(true)}>💬 {comments.length}</button>
         <button className="action-btn">🔗 공유</button>
       </div>
 
-      {showComments && (
-        <div className="comments-section">
-          {comments.map(c => (
-            <div className="comment" key={c.id}>
-              <div className="avatar" style={{ width: 28, height: 28, fontSize: 13 }}>{c.user_emoji || "🧗"}</div>
-              <div className="comment-bubble">
-                <div className="comment-user">{c.user_name}</div>
-                <p>{c.content}</p>
-              </div>
+      {/* 댓글 바텀시트 */}
+      {showCommentSheet && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCommentSheet(false); }}>
+          <div className="modal-sheet comment-sheet">
+            <div className="comment-sheet-handle" />
+            <div className="comment-sheet-header">
+              <span>댓글 {comments.length}개</span>
+              <button className="story-close-btn" onClick={() => setShowCommentSheet(false)}>×</button>
             </div>
-          ))}
-          <div className="comment-input-row">
-            <input className="comment-input" placeholder="피드백을 달아보세요..."
-              value={commentValue}
-              onChange={e => onCommentChange(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && onCommentSubmit()} />
-            <button className="send-btn" onClick={onCommentSubmit}>전송</button>
+            <div className="comment-sheet-body">
+              {comments.length === 0 && (
+                <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "24px 0", fontSize: 13 }}>
+                  첫 댓글을 달아보세요!
+                </div>
+              )}
+              {comments.map(c => (
+                <div className="comment" key={c.id}>
+                  <div className="avatar" style={{ width: 28, height: 28, fontSize: 13 }}>{c.user_emoji || "🧗"}</div>
+                  <div className="comment-bubble">
+                    <div className="comment-user">{c.user_name}</div>
+                    <p>{c.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="comment-sheet-input">
+              <input className="comment-input" placeholder="피드백을 달아보세요..."
+                value={commentValue}
+                onChange={e => onCommentChange(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && onCommentSubmit()} />
+              <button className="send-btn" onClick={onCommentSubmit}>전송</button>
+            </div>
           </div>
         </div>
       )}

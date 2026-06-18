@@ -147,7 +147,6 @@ export default function MyPage() {
 
   async function handleDeletePost() {
     if (!selectedPost) return;
-    if (!window.confirm("게시물을 삭제할까요?")) return;
     const { error } = await supabase.from("posts").delete().eq("id", selectedPost.id);
     if (error) { alert("삭제 실패: " + error.message); return; }
     setMyPosts(prev => prev.filter(p => p.id !== selectedPost.id));
