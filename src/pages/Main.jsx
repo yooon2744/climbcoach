@@ -57,34 +57,39 @@ export default function Main() {
     if (!description.trim() && mediaFiles.length === 0) return;
     setUploading(true);
 
-    const media_urls = [];
-    for (const file of mediaFiles) {
-      const ext = file.name.split(".").pop();
-      const fileName = `${myName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
-      const { error } = await supabase.storage
-        .from("videos")
-        .upload(fileName, file, { contentType: file.type });
-      if (!error) {
+    try {
+      const media_urls = [];
+      for (const file of mediaFiles) {
+        const ext = file.name.split(".").pop();
+        const fileName = `${myName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("videos")
+          .upload(fileName, file, { contentType: file.type });
+        if (uploadError) throw new Error(`파일 업로드 실패: ${uploadError.message}`);
         const { data: { publicUrl } } = supabase.storage.from("videos").getPublicUrl(fileName);
         media_urls.push(publicUrl);
       }
+
+      const { error: insertError } = await supabase.from("posts").insert({
+        user_name: myName,
+        user_emoji: "🧗",
+        grade: "",
+        type: "post",
+        description,
+        likes: 0,
+        media_urls,
+      });
+      if (insertError) throw new Error(`게시물 저장 실패: ${insertError.message}`);
+
+      setDescription("");
+      setMediaFiles([]);
+      setShowUploadModal(false);
+      loadFeed();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUploading(false);
     }
-
-    await supabase.from("posts").insert({
-      user_name: myName,
-      user_emoji: "🧗",
-      grade: "",
-      type: "post",
-      description,
-      likes: 0,
-      media_urls,
-    });
-
-    setDescription("");
-    setMediaFiles([]);
-    setShowUploadModal(false);
-    setUploading(false);
-    loadFeed();
   }
 
   async function handleLike(postId, currentLikes) {
@@ -119,7 +124,7 @@ export default function Main() {
       <div className="story-row">
         {allStories.map(u => (
           <div className="story-item" key={u.user_name}
-            onClick={() => !u.isDemo && !u.isMe && setSelectedStory(u.user_name)}>
+            onClick={() => !u.isDemo && setSelectedStory(u.user_name)}>
             <div className={`story-ring${u.hasPosts ? "" : " story-ring-inactive"}`}>
               {u.profileImg ? (
                 <img src={u.profileImg} alt="" className="story-avatar story-avatar-photo" />

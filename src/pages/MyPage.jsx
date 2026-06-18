@@ -32,13 +32,11 @@ export default function MyPage() {
   const [settingInput, setSettingInput] = useState("");
 
   const [records, setRecords] = useState([]);
-  const [loadingRecords, setLoadingRecords] = useState(true);
-  const [showRecordModal, setShowRecordModal] = useState(false);
-  const [form, setForm] = useState({ gym: "", grade: "V3", result: "성공", climbed_at: "" });
-
   const [myPosts, setMyPosts] = useState([]);
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [editDescription, setEditDescription] = useState("");
 
-  // Calendar
   const [calDate, setCalDate] = useState(new Date());
   const [climbedDates, setClimbedDates] = useState({});
   const [showCalModal, setShowCalModal] = useState(false);
@@ -59,14 +57,12 @@ export default function MyPage() {
   }, [user]);
 
   async function loadRecords() {
-    setLoadingRecords(true);
     const { data } = await supabase
       .from("records")
       .select("*")
       .eq("user_name", myName)
       .order("climbed_at", { ascending: false });
     setRecords(data || []);
-    setLoadingRecords(false);
   }
 
   async function loadMyPosts() {
@@ -114,25 +110,6 @@ export default function MyPage() {
     localStorage.setItem(`settingDates_${user.id}`, JSON.stringify(list));
   }
 
-  async function handleAddRecord() {
-    if (!form.gym || !form.climbed_at) return;
-    await supabase.from("records").insert({
-      user_name: myName,
-      gym: form.gym,
-      grade: form.grade,
-      result: form.result,
-      climbed_at: form.climbed_at,
-    });
-    setForm({ gym: "", grade: "V3", result: "성공", climbed_at: "" });
-    setShowRecordModal(false);
-    loadRecords();
-  }
-
-  async function handleDeleteRecord(id) {
-    await supabase.from("records").delete().eq("id", id);
-    setRecords(prev => prev.filter(r => r.id !== id));
-  }
-
   async function handleCalRecord() {
     if (!calForm.gym) return;
     await supabase.from("records").insert({
@@ -151,6 +128,32 @@ export default function MyPage() {
     loadRecords();
   }
 
+  function openPostModal(post) {
+    setSelectedPost(post);
+    setEditDescription(post.description || "");
+    setShowPostModal(true);
+  }
+
+  async function handleEditPost() {
+    if (!selectedPost) return;
+    const { error } = await supabase
+      .from("posts")
+      .update({ description: editDescription })
+      .eq("id", selectedPost.id);
+    if (error) { alert("수정 실패: " + error.message); return; }
+    setMyPosts(prev => prev.map(p => p.id === selectedPost.id ? { ...p, description: editDescription } : p));
+    setShowPostModal(false);
+  }
+
+  async function handleDeletePost() {
+    if (!selectedPost) return;
+    if (!window.confirm("게시물을 삭제할까요?")) return;
+    const { error } = await supabase.from("posts").delete().eq("id", selectedPost.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setMyPosts(prev => prev.filter(p => p.id !== selectedPost.id));
+    setShowPostModal(false);
+  }
+
   const signupDate = user?.created_at ? new Date(user.created_at) : new Date();
   const daysSince = Math.max(1, Math.floor((new Date() - signupDate) / (1000 * 60 * 60 * 24)) + 1);
 
@@ -161,7 +164,6 @@ export default function MyPage() {
   const maxCount = Math.max(...gradeCounts.map(g => g.count), 1);
   const hasGradeData = gradeCounts.some(g => g.count > 0);
 
-  // Calendar helpers
   const year = calDate.getFullYear();
   const month = calDate.getMonth();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
@@ -180,7 +182,7 @@ export default function MyPage() {
           ) : (
             <div className="profile-avatar">🧗</div>
           )}
-          <div className="profile-avatar-edit">📷</div>
+          <div className="profile-avatar-edit">+</div>
         </div>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageChange} />
         <div className="profile-name">{myName}</div>
@@ -230,7 +232,7 @@ export default function MyPage() {
             const thumb = p.media_urls?.[0] || p.video_url;
             const isVid = thumb && /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(thumb);
             return (
-              <div className="post-grid-item" key={p.id}>
+              <div className="post-grid-item" key={p.id} onClick={() => openPostModal(p)}>
                 {thumb ? (
                   isVid ? (
                     <video src={thumb} className="post-grid-thumb" muted />
@@ -243,40 +245,12 @@ export default function MyPage() {
                     <span style={{ fontSize: 10, color: "var(--text-muted)" }}>텍스트</span>
                   </div>
                 )}
+                <div className="post-grid-overlay">···</div>
               </div>
             );
           })}
         </div>
       )}
-
-      {/* 클라이밍 기록 */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 12px" }}>
-        <p className="section-title" style={{ marginBottom: 0 }}>클라이밍 기록</p>
-        <button className="btn btn-primary" style={{ padding: "7px 14px", fontSize: 13 }}
-          onClick={() => setShowRecordModal(true)}>+ 기록 추가</button>
-      </div>
-
-      {loadingRecords && (
-        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px 0" }}>불러오는 중...</div>
-      )}
-      {!loadingRecords && records.filter(r => r.result === "성공" || r.result === "실패" || r.result === "시도").length === 0 && (
-        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "16px 0", fontSize: 13 }}>
-          기록이 없어요. 추가해보세요!
-        </div>
-      )}
-      {records.filter(r => r.result === "성공" || r.result === "실패" || r.result === "시도").map(r => (
-        <div className="record-card" key={r.id}>
-          <div className="record-icon">{r.result === "성공" ? "✅" : r.result === "실패" ? "❌" : "🔄"}</div>
-          <div className="record-info">
-            <h4>{r.gym}</h4>
-            <span>{r.climbed_at}</span>
-          </div>
-          <span className={`tag ${r.result === "성공" ? "tag-grade" : "tag-fail"}`} style={{ marginRight: 8 }}>{r.result}</span>
-          <span className="record-grade">{r.grade}</span>
-          <button onClick={() => handleDeleteRecord(r.id)}
-            style={{ marginLeft: 10, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18 }}>×</button>
-        </div>
-      ))}
 
       {/* 달력 */}
       <div className="calendar-section">
@@ -406,42 +380,35 @@ export default function MyPage() {
         </div>
       )}
 
-      {/* 기록 추가 모달 */}
-      {showRecordModal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowRecordModal(false); }}>
+      {/* 게시물 수정/삭제 모달 */}
+      {showPostModal && selectedPost && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPostModal(false); }}>
           <div className="modal-sheet">
-            <h3>🧗 기록 추가</h3>
+            <h3>📝 게시물 관리</h3>
+            {(() => {
+              const url = selectedPost.media_urls?.[0] || selectedPost.video_url;
+              if (!url) return null;
+              const isVid = /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(url);
+              return (
+                <div style={{ marginBottom: 14, borderRadius: 8, overflow: "hidden" }}>
+                  {isVid
+                    ? <video src={url} style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} controls />
+                    : <img src={url} alt="" style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} />
+                  }
+                </div>
+              );
+            })()}
             <div className="form-group">
-              <label>암장</label>
-              <input className="form-input" placeholder="예) 더클라임 연남" value={form.gym}
-                onChange={e => setForm(p => ({ ...p, gym: e.target.value }))} />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>난이도</label>
-                <select className="form-input" value={form.grade}
-                  onChange={e => setForm(p => ({ ...p, grade: e.target.value }))}>
-                  {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>결과</label>
-                <select className="form-input" value={form.result}
-                  onChange={e => setForm(p => ({ ...p, result: e.target.value }))}>
-                  <option value="성공">성공</option>
-                  <option value="실패">실패</option>
-                  <option value="시도">시도</option>
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label>날짜</label>
-              <input className="form-input" type="date" value={form.climbed_at}
-                onChange={e => setForm(p => ({ ...p, climbed_at: e.target.value }))} />
+              <label>상세</label>
+              <textarea className="form-input" rows={3} value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                style={{ resize: "none" }} />
             </div>
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setShowRecordModal(false)}>취소</button>
-              <button className="btn btn-primary" onClick={handleAddRecord}>저장</button>
+              <button className="btn btn-ghost" style={{ color: "#ff5050", borderColor: "#ff5050" }}
+                onClick={handleDeletePost}>삭제</button>
+              <button className="btn btn-ghost" onClick={() => setShowPostModal(false)}>취소</button>
+              <button className="btn btn-primary" onClick={handleEditPost}>수정 완료</button>
             </div>
           </div>
         </div>
