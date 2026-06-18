@@ -1,54 +1,65 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
-const INITIAL_RECORDS = [
-  { id: 1, gym: "더클라임 연남", grade: "V4", result: "성공", date: "2026-06-17", icon: "✅" },
-  { id: 2, gym: "더클라임 연남", grade: "V5", result: "실패", date: "2026-06-17", icon: "❌" },
-  { id: 3, gym: "클라임파크 홍대", grade: "V3", result: "성공", date: "2026-06-15", icon: "✅" },
-  { id: 4, gym: "클라임파크 홍대", grade: "V4", result: "성공", date: "2026-06-15", icon: "✅" },
-  { id: 5, gym: "피어클라이밍", grade: "V2", result: "성공", date: "2026-06-12", icon: "✅" },
-];
-
-const GRADE_STATS = [
-  { grade: "V5+", count: 0, max: 10 },
-  { grade: "V4", count: 3, max: 10 },
-  { grade: "V3", count: 6, max: 10 },
-  { grade: "V2", count: 8, max: 10 },
-  { grade: "V1-", count: 10, max: 10 },
-];
+const GRADES = ["V0","V1","V2","V3","V4","V5","V6","V7","V8+"];
 
 export default function MyPage() {
-  const [records, setRecords] = useState(INITIAL_RECORDS);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ gym: "", grade: "V3", result: "성공", date: "" });
+  const [form, setForm] = useState({ gym: "", grade: "V3", result: "성공", climbed_at: "", user_name: "나" });
+
+  useEffect(() => { loadRecords(); }, []);
+
+  async function loadRecords() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("records")
+      .select("*")
+      .eq("user_name", "나")
+      .order("climbed_at", { ascending: false });
+    setRecords(data || []);
+    setLoading(false);
+  }
+
+  async function handleAdd() {
+    if (!form.gym || !form.climbed_at) return;
+    await supabase.from("records").insert({
+      user_name: "나",
+      gym: form.gym,
+      grade: form.grade,
+      result: form.result,
+      climbed_at: form.climbed_at,
+    });
+    setForm({ gym: "", grade: "V3", result: "성공", climbed_at: "", user_name: "나" });
+    setShowModal(false);
+    loadRecords();
+  }
+
+  async function handleDelete(id) {
+    await supabase.from("records").delete().eq("id", id);
+    setRecords(prev => prev.filter(r => r.id !== id));
+  }
 
   const successCount = records.filter(r => r.result === "성공").length;
   const gymCount = new Set(records.map(r => r.gym)).size;
 
-  function handleAddRecord() {
-    if (!form.gym || !form.date) return;
-    setRecords(prev => [{
-      id: Date.now(),
-      gym: form.gym,
-      grade: form.grade,
-      result: form.result,
-      date: form.date,
-      icon: form.result === "성공" ? "✅" : "❌",
-    }, ...prev]);
-    setForm({ gym: "", grade: "V3", result: "성공", date: "" });
-    setShowModal(false);
-  }
+  const gradeCounts = GRADES.map(g => ({
+    grade: g,
+    count: records.filter(r => r.grade === g && r.result === "성공").length,
+  }));
+  const maxCount = Math.max(...gradeCounts.map(g => g.count), 1);
 
   return (
     <div className="page">
-      {/* Profile */}
       <div className="profile-card">
         <div className="profile-avatar">🧗</div>
-        <div className="profile-name">홍길동</div>
-        <div className="profile-gym">주 암장: 더클라임 연남</div>
+        <div className="profile-name">나의 클라이밍</div>
+        <div className="profile-gym">기록을 쌓아가세요!</div>
         <div className="stats-row">
           <div className="stat-item">
             <span className="stat-val">{records.length}</span>
-            <span className="stat-label">총 세션</span>
+            <span className="stat-label">총 기록</span>
           </div>
           <div className="stat-item">
             <span className="stat-val">{successCount}</span>
@@ -61,46 +72,57 @@ export default function MyPage() {
         </div>
       </div>
 
-      {/* Grade chart */}
-      <div className="card">
-        <p className="section-title">난이도 분포</p>
-        {GRADE_STATS.map(g => (
-          <div className="level-bar-row" key={g.grade}>
-            <span className="level-label">{g.grade}</span>
-            <div className="level-bar-bg">
-              <div className="level-bar-fill" style={{ width: `${(g.count / g.max) * 100}%` }} />
+      {records.length > 0 && (
+        <div className="card">
+          <p className="section-title">완등 난이도 분포</p>
+          {gradeCounts.filter(g => g.count > 0).reverse().map(g => (
+            <div className="level-bar-row" key={g.grade}>
+              <span className="level-label">{g.grade}</span>
+              <div className="level-bar-bg">
+                <div className="level-bar-fill" style={{ width: `${(g.count / maxCount) * 100}%` }} />
+              </div>
+              <span className="level-count">{g.count}</span>
             </div>
-            <span className="level-count">{g.count}</span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Records */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <p className="section-title" style={{ marginBottom: 0 }}>클라이밍 기록</p>
         <button className="btn btn-primary" style={{ padding: "7px 14px", fontSize: "13px" }}
-          onClick={() => setShowModal(true)}>
-          + 기록 추가
-        </button>
+          onClick={() => setShowModal(true)}>+ 기록 추가</button>
       </div>
 
+      {loading && (
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0" }}>불러오는 중...</div>
+      )}
+
+      {!loading && records.length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "32px 0", fontSize: 14 }}>
+          아직 기록이 없어요!<br />
+          <span style={{ fontSize: 12 }}>첫 번째 클라이밍 기록을 추가해보세요 🧗</span>
+        </div>
+      )}
+
       {records.map(r => (
-        <div className="record-card" key={r.id}>
-          <div className="record-icon">{r.icon}</div>
+        <div className="record-card" key={r.id} style={{ cursor: "default" }}>
+          <div className="record-icon">{r.result === "성공" ? "✅" : r.result === "실패" ? "❌" : "🔄"}</div>
           <div className="record-info">
             <h4>{r.gym}</h4>
-            <span>{r.date}</span>
+            <span>{r.climbed_at}</span>
           </div>
           <span className={`tag ${r.result === "성공" ? "tag-grade" : "tag-fail"}`} style={{ marginRight: 8 }}>
             {r.result}
           </span>
           <span className="record-grade">{r.grade}</span>
+          <button onClick={() => handleDelete(r.id)}
+            style={{ marginLeft: 10, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}>
+            ×
+          </button>
         </div>
       ))}
 
-      <button className="add-record-btn" onClick={() => setShowModal(true)}>
-        + 새 기록 추가하기
-      </button>
+      <button className="add-record-btn" onClick={() => setShowModal(true)}>+ 새 기록 추가하기</button>
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
@@ -116,9 +138,7 @@ export default function MyPage() {
                 <label>난이도</label>
                 <select className="form-input" value={form.grade}
                   onChange={e => setForm(p => ({ ...p, grade: e.target.value }))}>
-                  {["V0","V1","V2","V3","V4","V5","V6","V7","V8+"].map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
+                  {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div className="form-group">
@@ -133,12 +153,12 @@ export default function MyPage() {
             </div>
             <div className="form-group">
               <label>날짜</label>
-              <input className="form-input" type="date" value={form.date}
-                onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+              <input className="form-input" type="date" value={form.climbed_at}
+                onChange={e => setForm(p => ({ ...p, climbed_at: e.target.value }))} />
             </div>
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>취소</button>
-              <button className="btn btn-primary" onClick={handleAddRecord}>저장</button>
+              <button className="btn btn-primary" onClick={handleAdd}>저장</button>
             </div>
           </div>
         </div>

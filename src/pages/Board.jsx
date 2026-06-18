@@ -1,158 +1,104 @@
-import { useState } from "react";
-
-const INITIAL_MEETUPS = [
-  {
-    id: 1,
-    gym: "더클라임 연남",
-    time: "오늘 18:00",
-    desc: "같이 다이노 연습하실 분~ V3-V5 수준이면 충분해요! 초보도 환영합니다 🙌",
-    activity: "다이노",
-    current: 2,
-    max: 4,
-    joined: false,
-    participants: ["🧗","🦅"],
-  },
-  {
-    id: 2,
-    gym: "클라임파크 홍대",
-    time: "내일 10:00",
-    desc: "아침 클라이밍 번개! 오프닝 시간 맞춰서 가볍게 웜업하고 루트 정복해봐요. V4-V6",
-    activity: "루트 세션",
-    current: 1,
-    max: 3,
-    joined: false,
-    participants: ["🏔️"],
-  },
-  {
-    id: 3,
-    gym: "더클라임 마포",
-    time: "오늘 20:30",
-    desc: "저녁 번개! 보울더링 집중 세션. 서로 베타 공유하면서 진행해요. 비기너도 OK",
-    activity: "보울더링",
-    current: 3,
-    max: 3,
-    joined: false,
-    participants: ["💪","🎯","😊"],
-  },
-  {
-    id: 4,
-    gym: "피어클라이밍 서울숲",
-    time: "6/20 14:00",
-    desc: "주말 번개 모임! 실내 톱로프 같이 하실 분. 장비 없어도 대여 가능해요 🪢",
-    activity: "톱로프",
-    current: 2,
-    max: 5,
-    joined: false,
-    participants: ["🧗","🦅"],
-  },
-];
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 const FILTERS = ["전체", "오늘", "더클라임", "클라임파크", "보울더링", "다이노"];
 
 export default function Board() {
-  const [meetups, setMeetups] = useState(INITIAL_MEETUPS);
+  const [meetups, setMeetups] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("전체");
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ gym: "", date: "", time: "", desc: "", max: "4", activity: "" });
 
-  function handleJoin(id) {
-    setMeetups(prev => prev.map(m => {
-      if (m.id !== id) return m;
-      if (m.joined) return { ...m, joined: false, current: m.current - 1, participants: m.participants.slice(0, -1) };
-      if (m.current >= m.max) return m;
-      return { ...m, joined: true, current: m.current + 1, participants: [...m.participants, "😊"] };
-    }));
+  useEffect(() => { loadMeetups(); }, []);
+
+  async function loadMeetups() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("meetups")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setMeetups(data || []);
+    setLoading(false);
   }
 
-  function handlePost() {
+  async function handlePost() {
     if (!form.gym || !form.desc) return;
-    const newMeetup = {
-      id: Date.now(),
+    const timeLabel = form.date && form.time
+      ? `${form.date.slice(5)} ${form.time}`
+      : form.date || form.time || "시간 미정";
+    await supabase.from("meetups").insert({
       gym: form.gym,
-      time: `${form.date} ${form.time}`.trim() || "시간 미정",
-      desc: form.desc,
+      meet_time: timeLabel,
       activity: form.activity || "클라이밍",
-      current: 1,
-      max: Number(form.max) || 4,
-      joined: true,
-      participants: ["😊"],
-    };
-    setMeetups(prev => [newMeetup, ...prev]);
+      description: form.desc,
+      max_participants: Number(form.max) || 4,
+    });
     setForm({ gym: "", date: "", time: "", desc: "", max: "4", activity: "" });
     setShowModal(false);
+    loadMeetups();
   }
+
+  async function handleDelete(id) {
+    await supabase.from("meetups").delete().eq("id", id);
+    setMeetups(prev => prev.filter(m => m.id !== id));
+  }
+
+  const today = new Date().toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }).replace(" ", "").replace(".", "/").replace(".", "");
 
   const filtered = activeFilter === "전체"
     ? meetups
     : meetups.filter(m =>
-        m.gym.includes(activeFilter) ||
-        m.activity.includes(activeFilter) ||
-        (activeFilter === "오늘" && m.time.startsWith("오늘"))
+        m.gym?.includes(activeFilter) ||
+        m.activity?.includes(activeFilter) ||
+        (activeFilter === "오늘" && m.meet_time?.includes(today))
       );
 
   return (
     <div className="page">
       <div className="board-header">
         <h2>⚡ 번개 모집</h2>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          + 모집하기
-        </button>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 모집하기</button>
       </div>
 
       <div className="filter-row">
         {FILTERS.map(f => (
-          <button
-            key={f}
-            className={`filter-chip${activeFilter === f ? " active" : ""}`}
-            onClick={() => setActiveFilter(f)}
-          >
-            {f}
-          </button>
+          <button key={f} className={`filter-chip${activeFilter === f ? " active" : ""}`}
+            onClick={() => setActiveFilter(f)}>{f}</button>
         ))}
       </div>
 
-      {filtered.map(m => {
-        const isFull = m.current >= m.max;
-        return (
-          <div className="meetup-card" key={m.id}>
-            <div className="meetup-card-top">
-              <div>
-                <div className="meetup-gym">{m.gym}</div>
-                <div className="meetup-time">🕐 {m.time}</div>
-              </div>
-              <span className={`meetup-badge${isFull ? " full" : ""}`}>
-                {isFull ? "마감" : "모집중"}
-              </span>
-            </div>
-            <p className="meetup-desc">{m.desc}</p>
-            <div className="meetup-footer">
-              <div className="meetup-participants">
-                <div className="participant-avatars">
-                  {m.participants.map((p, i) => (
-                    <div className="avatar" key={i} style={{ width: 22, height: 22, fontSize: 11 }}>{p}</div>
-                  ))}
-                </div>
-                <span>{m.current}/{m.max}명</span>
-                <span className="tag tag-grade" style={{ marginLeft: 4 }}>{m.activity}</span>
-              </div>
-              <button
-                className={`join-btn${m.joined ? " joined" : ""}`}
-                onClick={() => handleJoin(m.id)}
-                disabled={isFull && !m.joined}
-              >
-                {m.joined ? "✓ 참여중" : isFull ? "마감" : "참여하기"}
-              </button>
-            </div>
-          </div>
-        );
-      })}
+      {loading && (
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0" }}>불러오는 중...</div>
+      )}
 
-      {filtered.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "48px 0", fontSize: 14 }}>
-          해당 조건의 번개가 없어요 😢<br />
+          번개 모집이 없어요 😢<br />
           <span style={{ fontSize: 12 }}>직접 만들어보세요!</span>
         </div>
       )}
+
+      {filtered.map(m => (
+        <div className="meetup-card" key={m.id}>
+          <div className="meetup-card-top">
+            <div>
+              <div className="meetup-gym">{m.gym}</div>
+              <div className="meetup-time">🕐 {m.meet_time}</div>
+            </div>
+            <span className="meetup-badge">모집중</span>
+          </div>
+          <p className="meetup-desc">{m.description}</p>
+          <div className="meetup-footer">
+            <div className="meetup-participants">
+              <span className="tag tag-grade">{m.activity}</span>
+              <span style={{ marginLeft: 8 }}>최대 {m.max_participants}명</span>
+            </div>
+            <button className="join-btn" style={{ background: "transparent", color: "#ff5050", border: "1px solid #ff5050" }}
+              onClick={() => handleDelete(m.id)}>삭제</button>
+          </div>
+        </div>
+      ))}
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
