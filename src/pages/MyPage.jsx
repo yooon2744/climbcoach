@@ -136,19 +136,26 @@ export default function MyPage() {
 
   async function handleEditPost() {
     if (!selectedPost) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("posts")
       .update({ description: editDescription })
-      .eq("id", selectedPost.id);
+      .eq("id", selectedPost.id)
+      .select();
     if (error) { alert("수정 실패: " + error.message); return; }
+    if (!data || data.length === 0) { alert("수정 권한 없음 — Supabase에서 RLS를 꺼주세요.\nALTER TABLE posts DISABLE ROW LEVEL SECURITY;"); return; }
     setMyPosts(prev => prev.map(p => p.id === selectedPost.id ? { ...p, description: editDescription } : p));
     setShowPostModal(false);
   }
 
   async function handleDeletePost() {
     if (!selectedPost) return;
-    const { error } = await supabase.from("posts").delete().eq("id", selectedPost.id);
+    const { data, error } = await supabase
+      .from("posts")
+      .delete()
+      .eq("id", selectedPost.id)
+      .select();
     if (error) { alert("삭제 실패: " + error.message); return; }
+    if (!data || data.length === 0) { alert("삭제 권한 없음 — Supabase에서 RLS를 꺼주세요.\nALTER TABLE posts DISABLE ROW LEVEL SECURITY;"); return; }
     setMyPosts(prev => prev.filter(p => p.id !== selectedPost.id));
     setShowPostModal(false);
   }
