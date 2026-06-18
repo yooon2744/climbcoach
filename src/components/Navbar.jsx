@@ -1,13 +1,20 @@
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
+  const { user, signOut } = useAuth();
+  const displayName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
+
   return (
     <>
       <nav className="topnav">
         <span className="logo">Climb<span>Coach</span></span>
-        <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "13px" }}>
-          로그인
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 13, color: "var(--text-muted)" }}>👤 {displayName}</span>
+          <button className="btn btn-ghost" style={{ padding: "5px 12px", fontSize: 12 }} onClick={signOut}>
+            로그아웃
+          </button>
+        </div>
       </nav>
 
       <nav className="bottom-nav">
@@ -17,7 +24,6 @@ export default function Navbar() {
           </svg>
           피드
         </NavLink>
-
         <NavLink to="/board" className={({ isActive }) => isActive ? "active" : ""}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -25,7 +31,6 @@ export default function Navbar() {
           </svg>
           번개
         </NavLink>
-
         <NavLink to="/mypage" className={({ isActive }) => isActive ? "active" : ""}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="8" r="4" />

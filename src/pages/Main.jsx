@@ -1,37 +1,41 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
 export default function Main() {
+  const { user } = useAuth();
+  const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
+
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [commentInputs, setCommentInputs] = useState({});
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadForm, setUploadForm] = useState({ user_name: "", grade: "", type: "fail", description: "" });
+  const [uploadForm, setUploadForm] = useState({ grade: "", type: "fail", description: "" });
 
   useEffect(() => { loadFeed(); }, []);
 
   async function loadFeed() {
     setLoading(true);
-    const { data: posts } = await supabase
+    const { data } = await supabase
       .from("posts")
       .select("*, comments(*)")
       .order("created_at", { ascending: false });
-    setFeed(posts || []);
+    setFeed(data || []);
     setLoading(false);
   }
 
   async function handleUpload() {
-    if (!uploadForm.user_name || !uploadForm.description) return;
+    if (!uploadForm.description.trim()) return;
     await supabase.from("posts").insert({
-      user_name: uploadForm.user_name,
+      user_name: myName,
       user_emoji: "🧗",
       grade: uploadForm.grade,
       type: uploadForm.type,
       description: uploadForm.description,
       likes: 0,
     });
-    setUploadForm({ user_name: "", grade: "", type: "fail", description: "" });
+    setUploadForm({ grade: "", type: "fail", description: "" });
     setShowUploadModal(false);
     loadFeed();
   }
@@ -46,8 +50,8 @@ export default function Main() {
     if (!text) return;
     await supabase.from("comments").insert({
       post_id: postId,
-      user_name: "나",
-      user_emoji: "😊",
+      user_name: myName,
+      user_emoji: "💬",
       content: text,
     });
     setCommentInputs(prev => ({ ...prev, [postId]: "" }));
@@ -71,15 +75,13 @@ export default function Main() {
       <p className="section-title">최근 피드백 요청</p>
 
       {loading && (
-        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0" }}>
-          불러오는 중...
-        </div>
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0" }}>불러오는 중...</div>
       )}
 
       {!loading && feed.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "48px 0", fontSize: 14 }}>
           아직 게시물이 없어요 😢<br />
-          <span style={{ fontSize: 12 }}>첫 번째로 실패 영상을 올려보세요!</span>
+          <span style={{ fontSize: 12 }}>첫 번째로 피드백 요청을 올려보세요!</span>
         </div>
       )}
 
@@ -98,11 +100,6 @@ export default function Main() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowUploadModal(false)}>
           <div className="modal-sheet">
             <h3>🎬 피드백 요청 올리기</h3>
-            <div className="form-group">
-              <label>이름 / 닉네임</label>
-              <input className="form-input" placeholder="예) 홍길동" value={uploadForm.user_name}
-                onChange={e => setUploadForm(p => ({ ...p, user_name: e.target.value }))} />
-            </div>
             <div className="form-row">
               <div className="form-group">
                 <label>난이도</label>

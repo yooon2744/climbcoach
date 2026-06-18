@@ -1,22 +1,26 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
 const GRADES = ["V0","V1","V2","V3","V4","V5","V6","V7","V8+"];
 
 export default function MyPage() {
+  const { user } = useAuth();
+  const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
+
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ gym: "", grade: "V3", result: "성공", climbed_at: "", user_name: "나" });
+  const [form, setForm] = useState({ gym: "", grade: "V3", result: "성공", climbed_at: "" });
 
-  useEffect(() => { loadRecords(); }, []);
+  useEffect(() => { if (user) loadRecords(); }, [user]);
 
   async function loadRecords() {
     setLoading(true);
     const { data } = await supabase
       .from("records")
       .select("*")
-      .eq("user_name", "나")
+      .eq("user_name", myName)
       .order("climbed_at", { ascending: false });
     setRecords(data || []);
     setLoading(false);
@@ -25,13 +29,13 @@ export default function MyPage() {
   async function handleAdd() {
     if (!form.gym || !form.climbed_at) return;
     await supabase.from("records").insert({
-      user_name: "나",
+      user_name: myName,
       gym: form.gym,
       grade: form.grade,
       result: form.result,
       climbed_at: form.climbed_at,
     });
-    setForm({ gym: "", grade: "V3", result: "성공", climbed_at: "", user_name: "나" });
+    setForm({ gym: "", grade: "V3", result: "성공", climbed_at: "" });
     setShowModal(false);
     loadRecords();
   }
@@ -49,13 +53,14 @@ export default function MyPage() {
     count: records.filter(r => r.grade === g && r.result === "성공").length,
   }));
   const maxCount = Math.max(...gradeCounts.map(g => g.count), 1);
+  const hasGradeData = gradeCounts.some(g => g.count > 0);
 
   return (
     <div className="page">
       <div className="profile-card">
         <div className="profile-avatar">🧗</div>
-        <div className="profile-name">나의 클라이밍</div>
-        <div className="profile-gym">기록을 쌓아가세요!</div>
+        <div className="profile-name">{myName}</div>
+        <div className="profile-gym">{user?.email}</div>
         <div className="stats-row">
           <div className="stat-item">
             <span className="stat-val">{records.length}</span>
@@ -72,7 +77,7 @@ export default function MyPage() {
         </div>
       </div>
 
-      {records.length > 0 && (
+      {hasGradeData && (
         <div className="card">
           <p className="section-title">완등 난이도 분포</p>
           {gradeCounts.filter(g => g.count > 0).reverse().map(g => (
@@ -89,7 +94,7 @@ export default function MyPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <p className="section-title" style={{ marginBottom: 0 }}>클라이밍 기록</p>
-        <button className="btn btn-primary" style={{ padding: "7px 14px", fontSize: "13px" }}
+        <button className="btn btn-primary" style={{ padding: "7px 14px", fontSize: 13 }}
           onClick={() => setShowModal(true)}>+ 기록 추가</button>
       </div>
 
@@ -105,7 +110,7 @@ export default function MyPage() {
       )}
 
       {records.map(r => (
-        <div className="record-card" key={r.id} style={{ cursor: "default" }}>
+        <div className="record-card" key={r.id}>
           <div className="record-icon">{r.result === "성공" ? "✅" : r.result === "실패" ? "❌" : "🔄"}</div>
           <div className="record-info">
             <h4>{r.gym}</h4>
@@ -116,7 +121,7 @@ export default function MyPage() {
           </span>
           <span className="record-grade">{r.grade}</span>
           <button onClick={() => handleDelete(r.id)}
-            style={{ marginLeft: 10, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}>
+            style={{ marginLeft: 10, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
             ×
           </button>
         </div>
