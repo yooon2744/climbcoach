@@ -63,10 +63,10 @@ export default function Main() {
         const ext = file.name.split(".").pop();
         const fileName = `${myName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
         const { error: uploadError } = await supabase.storage
-          .from("videos")
+          .from("VIDEOS")
           .upload(fileName, file, { contentType: file.type });
         if (uploadError) throw new Error(`파일 업로드 실패: ${uploadError.message}`);
-        const { data: { publicUrl } } = supabase.storage.from("videos").getPublicUrl(fileName);
+        const { data: { publicUrl } } = supabase.storage.from("VIDEOS").getPublicUrl(fileName);
         media_urls.push(publicUrl);
       }
 
