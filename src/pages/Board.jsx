@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
-const FILTERS = ["전체", "오늘", "더클라임", "클라임파크", "보울더링", "다이노"];
+const FILTERS = ["전체", "번개모임", "오늘", "더클라임", "클라임파크", "보울더링", "다이노"];
 
 export default function Board() {
   const [meetups, setMeetups] = useState([]);
@@ -51,14 +51,15 @@ export default function Board() {
     : meetups.filter(m =>
         m.gym?.includes(activeFilter) ||
         m.activity?.includes(activeFilter) ||
-        (activeFilter === "오늘" && m.meet_time?.includes(today))
+        (activeFilter === "오늘" && m.meet_time?.includes(today)) ||
+        (activeFilter === "번개모임")
       );
 
   return (
     <div className="page">
       <div className="board-header">
-        <h2>⚡ 번개 모집</h2>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 모집하기</button>
+        <h2>💬 커뮤니티</h2>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 글쓰기</button>
       </div>
 
       <div className="filter-row">
@@ -74,8 +75,8 @@ export default function Board() {
 
       {!loading && filtered.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "48px 0", fontSize: 14 }}>
-          번개 모집이 없어요 😢<br />
-          <span style={{ fontSize: 12 }}>직접 만들어보세요!</span>
+          게시물이 없어요 😢<br />
+          <span style={{ fontSize: 12 }}>직접 글을 써보세요!</span>
         </div>
       )}
 
@@ -103,10 +104,10 @@ export default function Board() {
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-sheet">
-            <h3>⚡ 번개 모집 올리기</h3>
+            <h3>✏️ 글쓰기</h3>
             <div className="form-group">
-              <label>암장</label>
-              <input className="form-input" placeholder="예) 더클라임 연남" value={form.gym}
+              <label>제목 / 암장</label>
+              <input className="form-input" placeholder="예) 더클라임 연남 같이 가실 분" value={form.gym}
                 onChange={e => setForm(p => ({ ...p, gym: e.target.value }))} />
             </div>
             <div className="form-row">
@@ -124,7 +125,7 @@ export default function Board() {
             <div className="form-row">
               <div className="form-group">
                 <label>활동</label>
-                <input className="form-input" placeholder="예) 다이노, 보울더링" value={form.activity}
+                <input className="form-input" placeholder="예) 번개모임, 다이노" value={form.activity}
                   onChange={e => setForm(p => ({ ...p, activity: e.target.value }))} />
               </div>
               <div className="form-group">
@@ -134,7 +135,7 @@ export default function Board() {
               </div>
             </div>
             <div className="form-group">
-              <label>한마디</label>
+              <label>내용</label>
               <input className="form-input" placeholder="예) V3-V5 같이 다이노 하실 분~" value={form.desc}
                 onChange={e => setForm(p => ({ ...p, desc: e.target.value }))} />
             </div>

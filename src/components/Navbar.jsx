@@ -23,7 +23,7 @@ export default function Navbar() {
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M7 8h10M7 12h6M7 16h8" />
           </svg>
-          번개
+          커뮤니티
         </NavLink>
         <NavLink to="/" end className={({ isActive }) => isActive ? "active feed-center-btn" : "feed-center-btn"}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

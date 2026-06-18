@@ -5,14 +5,14 @@
 }
 
 :root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --surface2: #22263a;
+  --bg: #202020;
+  --surface: #2a2a2a;
+  --surface2: #353535;
   --accent: #ff6b35;
   --accent-soft: rgba(255, 107, 53, 0.15);
   --text: #f0f0f0;
   --text-muted: #888;
-  --border: #2e3245;
+  --border: #404040;
   --radius: 12px;
   --nav-height: 60px;
   --bottom-nav-height: 64px;
@@ -838,6 +838,201 @@ body {
 .bottom-nav a.feed-center-btn svg {
   width: 26px;
   height: 26px;
+}
+
+/* ════════════════════════════════════
+   FAB (Floating Action Button)
+════════════════════════════════════ */
+.fab {
+  position: fixed;
+  bottom: calc(var(--bottom-nav-height) + 18px);
+  right: 20px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  font-size: 28px;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.55);
+  z-index: 90;
+  transition: transform 0.2s, box-shadow 0.2s;
+  line-height: 1;
+}
+.fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 22px rgba(255, 107, 53, 0.7);
+}
+
+/* ════════════════════════════════════
+   CALENDAR
+════════════════════════════════════ */
+.calendar-section {
+  margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 90px;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.calendar-title { font-size: 16px; font-weight: 700; }
+
+.cal-nav-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 3px 12px;
+  transition: all 0.2s;
+}
+.cal-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.cal-day-labels {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.cal-day-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cal-cell:not(.empty):hover { background: var(--surface2); }
+.cal-cell.today { color: var(--accent); font-weight: 700; border: 1.5px solid var(--accent); }
+.cal-cell.climbed { background: var(--accent); color: white; font-weight: 700; }
+.cal-cell.empty { cursor: default; }
+
+/* ════════════════════════════════════
+   MYPAGE — PROFILE IMAGE
+════════════════════════════════════ */
+.profile-avatar-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 12px;
+  cursor: pointer;
+}
+
+.profile-avatar-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--accent);
+}
+
+.profile-avatar-edit {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  border: 2px solid var(--surface);
+}
+
+/* stats clickable */
+.stat-item.stat-clickable { cursor: pointer; transition: background 0.2s; }
+.stat-item.stat-clickable:hover { background: var(--accent-soft); }
+
+/* ════════════════════════════════════
+   MYPAGE — POST GRID
+════════════════════════════════════ */
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  margin-bottom: 24px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.post-grid-item {
+  aspect-ratio: 1;
+  background: var(--surface2);
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.post-grid-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-grid-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* ════════════════════════════════════
+   EDIT LIST (회원권 / 세팅 일정)
+════════════════════════════════════ */
+.edit-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.edit-list-item button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
 }
 
 /* ════════════════════════════════════

@@ -2,6 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
+const DEMO_STORIES = [
+  { user_name: "클라이머A", user_emoji: "🧗", isDemo: true },
+  { user_name: "암장고수", user_emoji: "🏆", isDemo: true },
+  { user_name: "볼더러킹", user_emoji: "💪", isDemo: true },
+  { user_name: "V8도전중", user_emoji: "🔥", isDemo: true },
+];
+
+const GRADES = ["V0","V1","V2","V3","V4","V5","V6","V7","V8+"];
+
 export default function Main() {
   const { user } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
@@ -17,7 +26,13 @@ export default function Main() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  useEffect(() => { loadFeed(); }, []);
+  const [calDate, setCalDate] = useState(new Date());
+  const [climbedDates, setClimbedDates] = useState(new Set());
+  const [showDayModal, setShowDayModal] = useState(false);
+  const [selectedDay, setSelectedDay] = useState("");
+  const [dayForm, setDayForm] = useState({ gym: "", grade: "V3", result: "성공" });
+
+  useEffect(() => { loadFeed(); loadClimbedDates(); }, []);
 
   async function loadFeed() {
     setLoading(true);
@@ -27,7 +42,6 @@ export default function Main() {
       .order("created_at", { ascending: false });
     const posts = data || [];
     setFeed(posts);
-
     const seen = new Set();
     const users = [];
     for (const p of posts) {
@@ -40,10 +54,18 @@ export default function Main() {
     setLoading(false);
   }
 
+  async function loadClimbedDates() {
+    if (!user) return;
+    const { data } = await supabase
+      .from("records")
+      .select("climbed_at")
+      .eq("user_name", myName);
+    setClimbedDates(new Set((data || []).map(r => r.climbed_at)));
+  }
+
   async function handleUpload() {
     if (!uploadForm.description.trim()) return;
     setUploading(true);
-
     let video_url = null;
     if (videoFile) {
       const ext = videoFile.name.split(".").pop();
@@ -56,7 +78,6 @@ export default function Main() {
         video_url = publicUrl;
       }
     }
-
     await supabase.from("posts").insert({
       user_name: myName,
       user_emoji: "🧗",
@@ -66,7 +87,6 @@ export default function Main() {
       likes: 0,
       video_url,
     });
-
     setUploadForm({ grade: "", type: "fail", description: "" });
     setVideoFile(null);
     setShowUploadModal(false);
@@ -92,28 +112,48 @@ export default function Main() {
     loadFeed();
   }
 
+  async function handleDayRecord() {
+    if (!dayForm.gym) return;
+    await supabase.from("records").insert({
+      user_name: myName,
+      gym: dayForm.gym,
+      grade: dayForm.grade,
+      result: dayForm.result,
+      climbed_at: selectedDay,
+    });
+    setClimbedDates(prev => new Set([...prev, selectedDay]));
+    setShowDayModal(false);
+    setDayForm({ gym: "", grade: "V3", result: "성공" });
+  }
+
+  const realUserNames = new Set(storyUsers.map(u => u.user_name));
+  const allStories = [
+    ...DEMO_STORIES.filter(d => !realUserNames.has(d.user_name)),
+    ...storyUsers,
+  ];
   const storyPosts = selectedStory ? feed.filter(f => f.user_name === selectedStory) : [];
+
+  const year = calDate.getFullYear();
+  const month = calDate.getMonth();
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const toDateStr = (d) => `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const calCells = [...Array(firstDayOfWeek).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   return (
     <div className="page">
-      {/* 스토리 원형 목록 */}
-      {storyUsers.length > 0 && (
-        <div className="story-row">
-          {storyUsers.map(u => (
-            <div className="story-item" key={u.user_name} onClick={() => setSelectedStory(u.user_name)}>
-              <div className="story-ring">
-                <div className="story-avatar">{u.user_emoji}</div>
-              </div>
-              <span className="story-name">{u.user_name}</span>
+      {/* 스토리 원형 */}
+      <div className="story-row">
+        {allStories.map(u => (
+          <div className="story-item" key={u.user_name}
+            onClick={() => !u.isDemo && setSelectedStory(u.user_name)}>
+            <div className="story-ring">
+              <div className="story-avatar">{u.user_emoji}</div>
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className="upload-zone" onClick={() => setShowUploadModal(true)}>
-        <div className="upload-icon">🎬</div>
-        <h3>실패 영상을 올려보세요</h3>
-        <p>클릭해서 피드백 요청 올리기 · 코치들이 댓글로 교정해줘요</p>
+            <span className="story-name">{u.user_name}</span>
+          </div>
+        ))}
       </div>
 
       <p className="section-title">최근 피드백 요청</p>
@@ -121,14 +161,12 @@ export default function Main() {
       {loading && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0" }}>불러오는 중...</div>
       )}
-
       {!loading && feed.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "48px 0", fontSize: 14 }}>
           아직 게시물이 없어요 😢<br />
-          <span style={{ fontSize: 12 }}>첫 번째로 피드백 요청을 올려보세요!</span>
+          <span style={{ fontSize: 12 }}>하단 + 버튼으로 첫 피드백 요청을 올려보세요!</span>
         </div>
       )}
-
       {feed.map(item => (
         <FeedCard
           key={item.id}
@@ -140,13 +178,45 @@ export default function Main() {
         />
       ))}
 
+      {/* 월별 달력 */}
+      <div className="calendar-section">
+        <div className="calendar-nav">
+          <button className="cal-nav-btn" onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>‹</button>
+          <span className="calendar-title">{year}년 {month + 1}월</span>
+          <button className="cal-nav-btn" onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>›</button>
+        </div>
+        <div className="cal-day-labels">
+          {["일","월","화","수","목","금","토"].map(d => (
+            <div key={d} className="cal-day-label">{d}</div>
+          ))}
+        </div>
+        <div className="calendar-grid">
+          {calCells.map((d, i) => {
+            if (!d) return <div key={i} className="cal-cell empty" />;
+            const ds = toDateStr(d);
+            const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+            const isClimbed = climbedDates.has(ds);
+            return (
+              <div key={i}
+                className={`cal-cell${isClimbed ? " climbed" : ""}${isToday && !isClimbed ? " today" : ""}`}
+                onClick={() => { setSelectedDay(ds); setShowDayModal(true); }}>
+                {d}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* FAB */}
+      <button className="fab" onClick={() => setShowUploadModal(true)}>+</button>
+
       {/* 스토리 모달 */}
       {selectedStory && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSelectedStory(null)}>
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelectedStory(null); }}>
           <div className="modal-sheet story-modal">
             <div className="story-modal-header">
               <div className="story-modal-user">
-                <div className="story-ring" style={{ transform: "scale(0.75)" }}>
+                <div className="story-ring" style={{ transform: "scale(0.72)" }}>
                   <div className="story-avatar">
                     {storyUsers.find(u => u.user_name === selectedStory)?.user_emoji}
                   </div>
@@ -174,12 +244,50 @@ export default function Main() {
         </div>
       )}
 
+      {/* 날짜 기록 모달 */}
+      {showDayModal && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowDayModal(false); }}>
+          <div className="modal-sheet">
+            <h3>🧗 {selectedDay} 기록</h3>
+            {climbedDates.has(selectedDay) && (
+              <div style={{ color: "var(--accent)", fontSize: 13, marginBottom: 12 }}>✅ 이미 기록된 날이에요!</div>
+            )}
+            <div className="form-group">
+              <label>암장</label>
+              <input className="form-input" placeholder="예) 더클라임 연남" value={dayForm.gym}
+                onChange={e => setDayForm(p => ({ ...p, gym: e.target.value }))} />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>난이도</label>
+                <select className="form-input" value={dayForm.grade}
+                  onChange={e => setDayForm(p => ({ ...p, grade: e.target.value }))}>
+                  {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>결과</label>
+                <select className="form-input" value={dayForm.result}
+                  onChange={e => setDayForm(p => ({ ...p, result: e.target.value }))}>
+                  <option value="성공">성공</option>
+                  <option value="실패">실패</option>
+                  <option value="시도">시도</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowDayModal(false)}>취소</button>
+              <button className="btn btn-primary" onClick={handleDayRecord}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 업로드 모달 */}
       {showUploadModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowUploadModal(false)}>
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setShowUploadModal(false); setVideoFile(null); } }}>
           <div className="modal-sheet">
             <h3>🎬 피드백 요청 올리기</h3>
-
             <div className="form-group">
               <label>영상 첨부 (선택)</label>
               <div className="video-upload-zone" onClick={() => fileInputRef.current?.click()}>
@@ -198,24 +306,16 @@ export default function Main() {
                   </>
                 )}
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/*"
-                style={{ display: "none" }}
-                onChange={e => setVideoFile(e.target.files[0] || null)}
-              />
+              <input ref={fileInputRef} type="file" accept="video/*" style={{ display: "none" }}
+                onChange={e => setVideoFile(e.target.files[0] || null)} />
             </div>
-
             <div className="form-row">
               <div className="form-group">
                 <label>난이도</label>
                 <select className="form-input" value={uploadForm.grade}
                   onChange={e => setUploadForm(p => ({ ...p, grade: e.target.value }))}>
                   <option value="">선택</option>
-                  {["V0","V1","V2","V3","V4","V5","V6","V7","V8+"].map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
+                  {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div className="form-group">
@@ -233,8 +333,7 @@ export default function Main() {
                 placeholder="예) 발 위치가 자꾸 미끄러져요. 오른발 스메어 교정 부탁해요"
                 value={uploadForm.description}
                 onChange={e => setUploadForm(p => ({ ...p, description: e.target.value }))}
-                style={{ resize: "none" }}
-              />
+                style={{ resize: "none" }} />
             </div>
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => { setShowUploadModal(false); setVideoFile(null); }}>취소</button>
@@ -282,9 +381,7 @@ function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit
 
       <div className="feed-actions">
         <button className="action-btn" onClick={onLike}>🤍 {item.likes}</button>
-        <button className="action-btn" onClick={() => setShowComments(v => !v)}>
-          💬 {comments.length}
-        </button>
+        <button className="action-btn" onClick={() => setShowComments(v => !v)}>💬 {comments.length}</button>
         <button className="action-btn">🔗 공유</button>
       </div>
 
@@ -300,13 +397,10 @@ function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit
             </div>
           ))}
           <div className="comment-input-row">
-            <input
-              className="comment-input"
-              placeholder="자세 피드백을 달아보세요..."
+            <input className="comment-input" placeholder="자세 피드백을 달아보세요..."
               value={commentValue}
               onChange={e => onCommentChange(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && onCommentSubmit()}
-            />
+              onKeyDown={e => e.key === "Enter" && onCommentSubmit()} />
             <button className="send-btn" onClick={onCommentSubmit}>전송</button>
           </div>
         </div>
