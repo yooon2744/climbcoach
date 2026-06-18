@@ -32,6 +32,7 @@ export default function MyPage() {
   const [settingInput, setSettingInput] = useState("");
 
   const [records, setRecords] = useState([]);
+  const [friendCount, setFriendCount] = useState(0);
   const [myPosts, setMyPosts] = useState([]);
   const [showPostModal, setShowPostModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
@@ -54,7 +55,26 @@ export default function MyPage() {
     loadRecords();
     loadMyPosts();
     loadClimbedDates();
+    loadFollows();
+    upsertProfile();
   }, [user]);
+
+  async function upsertProfile() {
+    if (!myName) return;
+    await supabase.from("profiles").upsert({ user_name: myName }, { onConflict: "user_name" });
+  }
+
+  async function loadFollows() {
+    const [{ data: followers }, { data: following }] = await Promise.all([
+      supabase.from("follows").select("follower").eq("following", myName),
+      supabase.from("follows").select("following").eq("follower", myName),
+    ]);
+    const names = new Set([
+      ...(followers || []).map(f => f.follower),
+      ...(following || []).map(f => f.following),
+    ]);
+    setFriendCount(names.size);
+  }
 
   async function loadRecords() {
     const { data } = await supabase
@@ -77,11 +97,20 @@ export default function MyPage() {
   async function loadClimbedDates() {
     const { data } = await supabase
       .from("records")
-      .select("climbed_at, condition")
-      .eq("user_name", myName);
+      .select("id, climbed_at, condition, gym, memo, duration")
+      .eq("user_name", myName)
+      .eq("result", "");
     const map = {};
     (data || []).forEach(r => {
-      if (r.climbed_at) map[r.climbed_at] = r.condition || "😐";
+      if (r.climbed_at) {
+        map[r.climbed_at] = {
+          id: r.id,
+          condition: r.condition || "😐",
+          gym: r.gym || "",
+          memo: r.memo || "",
+          duration: r.duration || "1시간",
+        };
+      }
     });
     setClimbedDates(map);
   }
@@ -112,20 +141,28 @@ export default function MyPage() {
 
   async function handleCalRecord() {
     if (!calForm.gym) return;
-    await supabase.from("records").insert({
-      user_name: myName,
-      gym: calForm.gym,
-      grade: "",
-      result: "",
-      climbed_at: selectedCalDay,
-      memo: calForm.memo,
-      duration: calForm.duration,
-      condition: calForm.condition,
-    });
-    setClimbedDates(prev => ({ ...prev, [selectedCalDay]: calForm.condition }));
+    const existing = climbedDates[selectedCalDay];
+    if (existing?.id) {
+      await supabase.from("records").update({
+        gym: calForm.gym, memo: calForm.memo, duration: calForm.duration, condition: calForm.condition,
+      }).eq("id", existing.id);
+    } else {
+      await supabase.from("records").insert({
+        user_name: myName, gym: calForm.gym, grade: "", result: "",
+        climbed_at: selectedCalDay, memo: calForm.memo, duration: calForm.duration, condition: calForm.condition,
+      });
+    }
     setShowCalModal(false);
     setCalForm({ gym: "", memo: "", duration: "1시간", condition: "😐" });
-    loadRecords();
+    loadClimbedDates();
+  }
+
+  async function handleDeleteCalRecord() {
+    const existing = climbedDates[selectedCalDay];
+    if (!existing?.id) return;
+    await supabase.from("records").delete().eq("id", existing.id);
+    setShowCalModal(false);
+    loadClimbedDates();
   }
 
   function openPostModal(post) {
@@ -194,10 +231,14 @@ export default function MyPage() {
         <div className="profile-name">{myName}</div>
         <div className="profile-gym">{user?.email}</div>
 
-        <div className="stats-row">
+        <div className="stats-row stats-row-4">
           <div className="stat-item">
             <span className="stat-val">D+{daysSince}</span>
-            <span className="stat-label">클라이밍 시작</span>
+            <span className="stat-label">시작</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-val">{friendCount}</span>
+            <span className="stat-label">클친</span>
           </div>
           <div className="stat-item stat-clickable" onClick={() => setShowMemberModal(true)}>
             <span className="stat-val">{memberships.length || "+"}</span>
@@ -205,7 +246,7 @@ export default function MyPage() {
           </div>
           <div className="stat-item stat-clickable" onClick={() => setShowSettingModal(true)}>
             <span className="stat-val">{settingDates.length || "+"}</span>
-            <span className="stat-label">세팅 일정</span>
+            <span className="stat-label">세팅일정</span>
           </div>
         </div>
       </div>
@@ -279,7 +320,14 @@ export default function MyPage() {
             return (
               <div key={i}
                 className={`cal-cell${emoji ? " climbed" : ""}${isToday && !emoji ? " today" : ""}`}
-                onClick={() => { setSelectedCalDay(ds); setShowCalModal(true); }}>
+                onClick={() => {
+                  setSelectedCalDay(ds);
+                  const existing = climbedDates[ds];
+                  setCalForm(existing
+                    ? { gym: existing.gym, memo: existing.memo, duration: existing.duration, condition: existing.condition }
+                    : { gym: "", memo: "", duration: "1시간", condition: "😐" });
+                  setShowCalModal(true);
+                }}>
                 {emoji ? <span className="cal-emoji">{emoji}</span> : d}
               </div>
             );
@@ -347,7 +395,7 @@ export default function MyPage() {
       {showCalModal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCalModal(false); }}>
           <div className="modal-sheet">
-            <h3>🧗 {selectedCalDay}</h3>
+            <h3>{climbedDates[selectedCalDay]?.id ? "📅 기록 수정" : "🧗 기록 추가"} · {selectedCalDay}</h3>
             <div className="form-group">
               <label>암장</label>
               <input className="form-input" placeholder="예) 더클라임 연남" value={calForm.gym}
@@ -379,6 +427,10 @@ export default function MyPage() {
               </div>
             </div>
             <div className="modal-actions">
+              {climbedDates[selectedCalDay]?.id && (
+                <button className="btn btn-ghost" style={{ color: "#ff5050", borderColor: "#ff5050" }}
+                  onClick={handleDeleteCalRecord}>삭제</button>
+              )}
               <button className="btn btn-ghost" onClick={() => setShowCalModal(false)}>취소</button>
               <button className="btn btn-primary" onClick={handleCalRecord}>저장</button>
             </div>

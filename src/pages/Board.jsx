@@ -1,59 +1,54 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
-const FILTERS = ["전체", "번개모임", "오늘", "더클라임", "클라임파크", "보울더링", "다이노"];
+const CATEGORIES = ["번개모임", "질문", "후기", "자유"];
+const FILTERS = ["전체", ...CATEGORIES];
 
 export default function Board() {
-  const [meetups, setMeetups] = useState([]);
+  const { user } = useAuth();
+  const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
+
+  const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("전체");
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ gym: "", date: "", time: "", desc: "", max: "4", activity: "" });
+  const [form, setForm] = useState({ title: "", category: "자유", content: "" });
 
-  useEffect(() => { loadMeetups(); }, []);
+  useEffect(() => { loadPosts(); }, []);
 
-  async function loadMeetups() {
+  async function loadPosts() {
     setLoading(true);
     const { data } = await supabase
       .from("meetups")
       .select("*")
       .order("created_at", { ascending: false });
-    setMeetups(data || []);
+    setPosts(data || []);
     setLoading(false);
   }
 
   async function handlePost() {
-    if (!form.gym || !form.desc) return;
-    const timeLabel = form.date && form.time
-      ? `${form.date.slice(5)} ${form.time}`
-      : form.date || form.time || "시간 미정";
+    if (!form.title.trim()) return;
     await supabase.from("meetups").insert({
-      gym: form.gym,
-      meet_time: timeLabel,
-      activity: form.activity || "클라이밍",
-      description: form.desc,
-      max_participants: Number(form.max) || 4,
+      gym: form.title,
+      activity: form.category,
+      description: form.content,
+      meet_time: myName,
+      max_participants: 0,
     });
-    setForm({ gym: "", date: "", time: "", desc: "", max: "4", activity: "" });
+    setForm({ title: "", category: "자유", content: "" });
     setShowModal(false);
-    loadMeetups();
+    loadPosts();
   }
 
   async function handleDelete(id) {
     await supabase.from("meetups").delete().eq("id", id);
-    setMeetups(prev => prev.filter(m => m.id !== id));
+    setPosts(prev => prev.filter(p => p.id !== id));
   }
 
-  const today = new Date().toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }).replace(" ", "").replace(".", "/").replace(".", "");
-
   const filtered = activeFilter === "전체"
-    ? meetups
-    : meetups.filter(m =>
-        m.gym?.includes(activeFilter) ||
-        m.activity?.includes(activeFilter) ||
-        (activeFilter === "오늘" && m.meet_time?.includes(today)) ||
-        (activeFilter === "번개모임")
-      );
+    ? posts
+    : posts.filter(p => p.activity === activeFilter);
 
   return (
     <div className="page">
@@ -72,31 +67,26 @@ export default function Board() {
       {loading && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0" }}>불러오는 중...</div>
       )}
-
       {!loading && filtered.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "48px 0", fontSize: 14 }}>
           게시물이 없어요 😢<br />
-          <span style={{ fontSize: 12 }}>직접 글을 써보세요!</span>
+          <span style={{ fontSize: 12 }}>첫 글을 써보세요!</span>
         </div>
       )}
 
-      {filtered.map(m => (
-        <div className="meetup-card" key={m.id}>
-          <div className="meetup-card-top">
-            <div>
-              <div className="meetup-gym">{m.gym}</div>
-              <div className="meetup-time">🕐 {m.meet_time}</div>
-            </div>
-            <span className="meetup-badge">모집중</span>
+      {filtered.map(p => (
+        <div className="community-card" key={p.id}>
+          <div className="community-card-top">
+            <span className="community-category-chip">{p.activity || "자유"}</span>
+            <span className="community-date">{new Date(p.created_at).toLocaleDateString("ko-KR")}</span>
           </div>
-          <p className="meetup-desc">{m.description}</p>
-          <div className="meetup-footer">
-            <div className="meetup-participants">
-              <span className="tag tag-grade">{m.activity}</span>
-              <span style={{ marginLeft: 8 }}>최대 {m.max_participants}명</span>
-            </div>
-            <button className="join-btn" style={{ background: "transparent", color: "#ff5050", border: "1px solid #ff5050" }}
-              onClick={() => handleDelete(m.id)}>삭제</button>
+          <h3 className="community-title">{p.gym}</h3>
+          {p.description && <p className="community-content">{p.description}</p>}
+          <div className="community-footer">
+            <span className="community-author">🧗 {p.meet_time || "익명"}</span>
+            {p.meet_time === myName && (
+              <button className="community-del-btn" onClick={() => handleDelete(p.id)}>삭제</button>
+            )}
           </div>
         </div>
       ))}
@@ -106,38 +96,29 @@ export default function Board() {
           <div className="modal-sheet">
             <h3>✏️ 글쓰기</h3>
             <div className="form-group">
-              <label>제목 / 암장</label>
-              <input className="form-input" placeholder="예) 더클라임 연남 같이 가실 분" value={form.gym}
-                onChange={e => setForm(p => ({ ...p, gym: e.target.value }))} />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>날짜</label>
-                <input className="form-input" type="date" value={form.date}
-                  onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label>시간</label>
-                <input className="form-input" type="time" value={form.time}
-                  onChange={e => setForm(p => ({ ...p, time: e.target.value }))} />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>활동</label>
-                <input className="form-input" placeholder="예) 번개모임, 다이노" value={form.activity}
-                  onChange={e => setForm(p => ({ ...p, activity: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label>최대 인원</label>
-                <input className="form-input" type="number" min="2" max="10" value={form.max}
-                  onChange={e => setForm(p => ({ ...p, max: e.target.value }))} />
+              <label>카테고리</label>
+              <div className="category-picker">
+                {CATEGORIES.map(c => (
+                  <button key={c}
+                    className={`filter-chip${form.category === c ? " active" : ""}`}
+                    onClick={() => setForm(p => ({ ...p, category: c }))}>
+                    {c}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="form-group">
+              <label>제목</label>
+              <input className="form-input" placeholder="제목을 입력해주세요"
+                value={form.title}
+                onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div className="form-group">
               <label>내용</label>
-              <input className="form-input" placeholder="예) V3-V5 같이 다이노 하실 분~" value={form.desc}
-                onChange={e => setForm(p => ({ ...p, desc: e.target.value }))} />
+              <textarea className="form-input" rows={4} placeholder="내용을 자유롭게 적어보세요"
+                value={form.content}
+                onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
+                style={{ resize: "none" }} />
             </div>
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>취소</button>
