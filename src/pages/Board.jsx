@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -21,6 +21,7 @@ export default function Board() {
   const [detailComments, setDetailComments] = useState([]);
   const [detailInput, setDetailInput] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => { loadPosts(); }, []);
 
@@ -61,8 +62,10 @@ export default function Board() {
   }
 
   async function handleDetailComment() {
+    if (submittingRef.current) return;
     const text = detailInput.trim();
     if (!text || !selectedPost) return;
+    submittingRef.current = true;
     setDetailInput("");
     const { error } = await supabase.from("meetup_comments").insert({
       meetup_id: selectedPost.id,
@@ -70,6 +73,7 @@ export default function Board() {
       content: text,
     });
     if (error) {
+      submittingRef.current = false;
       alert(
         "답글 테이블이 없어요.\nSupabase SQL Editor에서 아래 SQL을 실행해주세요:\n\n" +
         "CREATE TABLE meetup_comments (\n" +
@@ -90,6 +94,7 @@ export default function Board() {
       .order("created_at", { ascending: true });
     setDetailComments(data || []);
     setCommentCounts(prev => ({ ...prev, [selectedPost.id]: (prev[selectedPost.id] || 0) + 1 }));
+    submittingRef.current = false;
   }
 
   async function handlePost() {
