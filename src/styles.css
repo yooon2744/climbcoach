@@ -1401,6 +1401,76 @@ body {
   display: block;
 }
 
+/* ── POST DETAIL SHEET ── */
+.post-detail-sheet {
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+
+.post-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.post-detail-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.post-detail-body {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.6;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+}
+
+.post-detail-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.post-detail-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0 10px;
+}
+
+.post-detail-comment-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.post-detail-comments {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 60px;
+  max-height: 280px;
+  padding-right: 2px;
+}
+
+.post-detail-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  flex-shrink: 0;
+}
+
 /* ── MEETUP COMMENTS ── */
 .community-reply-btn {
   background: none;

@@ -140,17 +140,18 @@ export default function MyPage() {
   }
 
   async function handleCalRecord() {
-    if (!calForm.gym) return;
     const existing = climbedDates[selectedCalDay];
     if (existing?.id) {
-      await supabase.from("records").update({
+      const { error } = await supabase.from("records").update({
         gym: calForm.gym, memo: calForm.memo, duration: calForm.duration, condition: calForm.condition,
       }).eq("id", existing.id);
+      if (error) { alert("수정 실패: " + error.message); return; }
     } else {
-      await supabase.from("records").insert({
-        user_name: myName, gym: calForm.gym, grade: "", result: "",
+      const { error } = await supabase.from("records").insert({
+        user_name: myName, gym: calForm.gym || "", grade: "", result: "",
         climbed_at: selectedCalDay, memo: calForm.memo, duration: calForm.duration, condition: calForm.condition,
       });
+      if (error) { alert("저장 실패: " + error.message); return; }
     }
     setShowCalModal(false);
     setCalForm({ gym: "", memo: "", duration: "1시간", condition: "😐" });
