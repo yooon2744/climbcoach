@@ -1,11 +1,17 @@
 import { NavLink } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
   const { user, signOut } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
+
+  useEffect(() => {
+    if (myName && myName !== "나") {
+      supabase.from("profiles").upsert({ user_name: myName }, { onConflict: "user_name" });
+    }
+  }, [myName]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);

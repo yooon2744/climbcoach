@@ -1401,6 +1401,50 @@ body {
   display: block;
 }
 
+/* ── MEETUP COMMENTS ── */
+.community-reply-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+.community-reply-btn:hover { color: var(--accent); }
+
+.meetup-comments {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.meetup-comment-item {
+  display: flex;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+.meetup-comment-user {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.meetup-comment-text {
+  color: var(--text);
+  word-break: break-word;
+}
+
+.meetup-comment-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .video-upload-zone {
   border: 2px dashed var(--border);
   border-radius: 10px;

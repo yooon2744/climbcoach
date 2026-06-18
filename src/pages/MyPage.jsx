@@ -315,20 +315,19 @@ export default function MyPage() {
           {calCells.map((d, i) => {
             if (!d) return <div key={i} className="cal-cell empty" />;
             const ds = toDateStr(d);
-            const emoji = climbedDates[ds];
+            const record = climbedDates[ds];
             const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
             return (
               <div key={i}
-                className={`cal-cell${emoji ? " climbed" : ""}${isToday && !emoji ? " today" : ""}`}
+                className={`cal-cell${record ? " climbed" : ""}${isToday && !record ? " today" : ""}`}
                 onClick={() => {
                   setSelectedCalDay(ds);
-                  const existing = climbedDates[ds];
-                  setCalForm(existing
-                    ? { gym: existing.gym, memo: existing.memo, duration: existing.duration, condition: existing.condition }
+                  setCalForm(record
+                    ? { gym: record.gym, memo: record.memo, duration: record.duration, condition: record.condition }
                     : { gym: "", memo: "", duration: "1시간", condition: "😐" });
                   setShowCalModal(true);
                 }}>
-                {emoji ? <span className="cal-emoji">{emoji}</span> : d}
+                {record ? <span className="cal-emoji">{record.condition}</span> : d}
               </div>
             );
           })}

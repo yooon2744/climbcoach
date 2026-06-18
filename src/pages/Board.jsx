@@ -14,6 +14,9 @@ export default function Board() {
   const [activeFilter, setActiveFilter] = useState("전체");
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: "", category: "자유", content: "" });
+  const [openComments, setOpenComments] = useState(null);
+  const [meetupComments, setMeetupComments] = useState({});
+  const [commentInputs, setCommentInputs] = useState({});
 
   useEffect(() => { loadPosts(); }, []);
 
@@ -44,6 +47,37 @@ export default function Board() {
   async function handleDelete(id) {
     await supabase.from("meetups").delete().eq("id", id);
     setPosts(prev => prev.filter(p => p.id !== id));
+    if (openComments === id) setOpenComments(null);
+  }
+
+  async function loadComments(meetupId) {
+    const { data } = await supabase
+      .from("meetup_comments")
+      .select("*")
+      .eq("meetup_id", meetupId)
+      .order("created_at", { ascending: true });
+    setMeetupComments(prev => ({ ...prev, [meetupId]: data || [] }));
+  }
+
+  async function handleCommentSubmit(meetupId) {
+    const text = commentInputs[meetupId]?.trim();
+    if (!text) return;
+    setCommentInputs(prev => ({ ...prev, [meetupId]: "" }));
+    await supabase.from("meetup_comments").insert({
+      meetup_id: meetupId,
+      user_name: myName,
+      content: text,
+    });
+    loadComments(meetupId);
+  }
+
+  function toggleComments(id) {
+    if (openComments === id) {
+      setOpenComments(null);
+    } else {
+      setOpenComments(id);
+      loadComments(id);
+    }
   }
 
   const filtered = activeFilter === "전체"
@@ -74,22 +108,57 @@ export default function Board() {
         </div>
       )}
 
-      {filtered.map(p => (
-        <div className="community-card" key={p.id}>
-          <div className="community-card-top">
-            <span className="community-category-chip">{p.activity || "자유"}</span>
-            <span className="community-date">{new Date(p.created_at).toLocaleDateString("ko-KR")}</span>
-          </div>
-          <h3 className="community-title">{p.gym}</h3>
-          {p.description && <p className="community-content">{p.description}</p>}
-          <div className="community-footer">
-            <span className="community-author">🧗 {p.meet_time || "익명"}</span>
-            {p.meet_time === myName && (
-              <button className="community-del-btn" onClick={() => handleDelete(p.id)}>삭제</button>
+      {filtered.map(p => {
+        const comments = meetupComments[p.id] || [];
+        const isOpen = openComments === p.id;
+        return (
+          <div className="community-card" key={p.id}>
+            <div className="community-card-top">
+              <span className="community-category-chip">{p.activity || "자유"}</span>
+              <span className="community-date">{new Date(p.created_at).toLocaleDateString("ko-KR")}</span>
+            </div>
+            <h3 className="community-title">{p.gym}</h3>
+            {p.description && <p className="community-content">{p.description}</p>}
+            <div className="community-footer">
+              <span className="community-author">🧗 {p.meet_time || "익명"}</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button className="community-reply-btn" onClick={() => toggleComments(p.id)}>
+                  💬 {comments.length > 0 ? comments.length : "답글"}
+                </button>
+                {p.meet_time === myName && (
+                  <button className="community-del-btn" onClick={() => handleDelete(p.id)}>삭제</button>
+                )}
+              </div>
+            </div>
+
+            {isOpen && (
+              <div className="meetup-comments">
+                {comments.length === 0 && (
+                  <div style={{ color: "var(--text-muted)", fontSize: 12, padding: "6px 0 8px" }}>첫 답글을 달아보세요!</div>
+                )}
+                {comments.map(c => (
+                  <div key={c.id} className="meetup-comment-item">
+                    <span className="meetup-comment-user">🧗 {c.user_name}</span>
+                    <span className="meetup-comment-text">{c.content}</span>
+                  </div>
+                ))}
+                <div className="meetup-comment-input-row">
+                  <input
+                    className="form-input"
+                    placeholder="답글 작성..."
+                    value={commentInputs[p.id] || ""}
+                    onChange={e => setCommentInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && handleCommentSubmit(p.id)}
+                    style={{ fontSize: 13, padding: "6px 10px" }}
+                  />
+                  <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 12, flexShrink: 0 }}
+                    onClick={() => handleCommentSubmit(p.id)}>전송</button>
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>

@@ -2,13 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
-const DEMO_STORIES = [
-  { user_name: "클라이머A", user_emoji: "🧗", isDemo: true },
-  { user_name: "클라이머B", user_emoji: "🧗", isDemo: true },
-  { user_name: "클라이머C", user_emoji: "🧗", isDemo: true },
-  { user_name: "클라이머D", user_emoji: "🧗", isDemo: true },
-];
-
 function isVideoUrl(url) {
   return /\.(mp4|mov|avi|webm|mkv|m4v)(\?|$)/i.test(url);
 }
@@ -20,17 +13,31 @@ export default function Main() {
 
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [storyUsers, setStoryUsers] = useState([]);
+  const [friendNames, setFriendNames] = useState([]);
   const [myHasPosts, setMyHasPosts] = useState(false);
   const [selectedStory, setSelectedStory] = useState(null);
   const [commentInputs, setCommentInputs] = useState({});
+  const [likedPosts, setLikedPosts] = useState(new Set());
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [description, setDescription] = useState("");
   const [mediaFiles, setMediaFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const commentSubmittingRef = useRef({});
 
-  useEffect(() => { loadFeed(); }, []);
+  useEffect(() => {
+    loadFeed();
+    loadFriendStories();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(`likedPosts_${user.id}`) || "[]");
+        setLikedPosts(new Set(saved));
+      } catch {}
+    }
+  }, [user]);
 
   async function loadFeed() {
     setLoading(true);
@@ -41,22 +48,20 @@ export default function Main() {
     const posts = data || [];
     setFeed(posts);
     setMyHasPosts(posts.some(p => p.user_name === myName));
-    const seen = new Set([myName]);
-    const users = [];
-    for (const p of posts) {
-      if (!seen.has(p.user_name)) {
-        seen.add(p.user_name);
-        users.push({ user_name: p.user_name, user_emoji: "🧗", hasPosts: true });
-      }
-    }
-    setStoryUsers(users);
     setLoading(false);
+  }
+
+  async function loadFriendStories() {
+    const { data } = await supabase
+      .from("follows")
+      .select("following")
+      .eq("follower", myName);
+    setFriendNames((data || []).map(f => f.following));
   }
 
   async function handleUpload() {
     if (!description.trim() && mediaFiles.length === 0) return;
     setUploading(true);
-
     try {
       const media_urls = [];
       for (const file of mediaFiles) {
@@ -69,7 +74,6 @@ export default function Main() {
         const { data: { publicUrl } } = supabase.storage.from("Videos").getPublicUrl(fileName);
         media_urls.push(publicUrl);
       }
-
       const { error: insertError } = await supabase.from("posts").insert({
         user_name: myName,
         user_emoji: "🧗",
@@ -80,7 +84,6 @@ export default function Main() {
         media_urls,
       });
       if (insertError) throw new Error(`게시물 저장 실패: ${insertError.message}`);
-
       setDescription("");
       setMediaFiles([]);
       setShowUploadModal(false);
@@ -93,28 +96,39 @@ export default function Main() {
   }
 
   async function handleLike(postId, currentLikes) {
-    await supabase.from("posts").update({ likes: currentLikes + 1 }).eq("id", postId);
-    setFeed(prev => prev.map(f => f.id === postId ? { ...f, likes: f.likes + 1 } : f));
+    const isLiked = likedPosts.has(postId);
+    const newLikes = Math.max(0, isLiked ? currentLikes - 1 : currentLikes + 1);
+    const newSet = new Set(likedPosts);
+    if (isLiked) newSet.delete(postId); else newSet.add(postId);
+    setLikedPosts(newSet);
+    localStorage.setItem(`likedPosts_${user?.id}`, JSON.stringify([...newSet]));
+    await supabase.from("posts").update({ likes: newLikes }).eq("id", postId);
+    setFeed(prev => prev.map(f => f.id === postId ? { ...f, likes: newLikes } : f));
   }
 
   async function handleCommentSubmit(postId) {
+    if (commentSubmittingRef.current[postId]) return;
     const text = commentInputs[postId]?.trim();
     if (!text) return;
+    commentSubmittingRef.current[postId] = true;
+    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
     await supabase.from("comments").insert({
       post_id: postId,
       user_name: myName,
       user_emoji: "🧗",
       content: text,
     });
-    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
+    commentSubmittingRef.current[postId] = false;
     loadFeed();
   }
 
-  const realUserNames = new Set(storyUsers.map(u => u.user_name));
   const allStories = [
     { user_name: myName, user_emoji: "🧗", profileImg: myProfileImg, hasPosts: myHasPosts, isMe: true },
-    ...DEMO_STORIES.filter(d => !realUserNames.has(d.user_name)),
-    ...storyUsers,
+    ...friendNames.map(name => ({
+      user_name: name,
+      user_emoji: "🧗",
+      hasPosts: feed.some(f => f.user_name === name),
+    })),
   ];
 
   const storyPosts = selectedStory ? feed.filter(f => f.user_name === selectedStory) : [];
@@ -124,7 +138,7 @@ export default function Main() {
       <div className="story-row">
         {allStories.map(u => (
           <div className="story-item" key={u.user_name}
-            onClick={() => !u.isDemo && setSelectedStory(u.user_name)}>
+            onClick={() => setSelectedStory(u.user_name)}>
             <div className={`story-ring${u.hasPosts ? "" : " story-ring-inactive"}`}>
               {u.profileImg ? (
                 <img src={u.profileImg} alt="" className="story-avatar story-avatar-photo" />
@@ -152,6 +166,7 @@ export default function Main() {
         <FeedCard
           key={item.id}
           item={item}
+          isLiked={likedPosts.has(item.id)}
           commentValue={commentInputs[item.id] || ""}
           onLike={() => handleLike(item.id, item.likes)}
           onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
@@ -180,6 +195,7 @@ export default function Main() {
               )}
               {storyPosts.map(item => (
                 <FeedCard key={item.id} item={item}
+                  isLiked={likedPosts.has(item.id)}
                   commentValue={commentInputs[item.id] || ""}
                   onLike={() => handleLike(item.id, item.likes)}
                   onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
@@ -240,14 +256,13 @@ export default function Main() {
   );
 }
 
-function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit }) {
+function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit }) {
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showCommentSheet, setShowCommentSheet] = useState(false);
 
   const comments = item.comments || [];
   const rawUrls = item.media_urls?.length > 0 ? item.media_urls
     : item.video_url ? [item.video_url] : [];
-  // 동영상 먼저
   const mediaUrls = [...rawUrls].sort((a, b) => (isVideoUrl(b) ? 1 : 0) - (isVideoUrl(a) ? 1 : 0));
   const currentUrl = mediaUrls[mediaIdx];
 
@@ -294,9 +309,8 @@ function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit
       )}
 
       <div className="feed-actions">
-        <button className="action-btn" onClick={onLike}>🤍 {item.likes}</button>
+        <button className="action-btn" onClick={onLike}>{isLiked ? "❤️" : "🤍"} {item.likes}</button>
         <button className="action-btn" onClick={() => setShowCommentSheet(true)}>💬 {comments.length}</button>
-        <button className="action-btn">🔗 공유</button>
       </div>
 
       {/* 댓글 바텀시트 */}
