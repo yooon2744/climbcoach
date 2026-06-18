@@ -3,6 +3,19 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
 const GRADES = ["V0","V1","V2","V3","V4","V5","V6","V7","V8+"];
+const CONDITIONS = ["😫", "😕", "😐", "🙂", "😄"];
+
+const DURATIONS = (() => {
+  const opts = [];
+  for (let m = 10; m <= 300; m += 10) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    if (h === 0) opts.push(`${min}분`);
+    else if (min === 0) opts.push(`${h}시간`);
+    else opts.push(`${h}시간 ${min}분`);
+  }
+  return opts;
+})();
 
 export default function MyPage() {
   const { user } = useAuth();
@@ -25,6 +38,13 @@ export default function MyPage() {
 
   const [myPosts, setMyPosts] = useState([]);
 
+  // Calendar
+  const [calDate, setCalDate] = useState(new Date());
+  const [climbedDates, setClimbedDates] = useState({});
+  const [showCalModal, setShowCalModal] = useState(false);
+  const [selectedCalDay, setSelectedCalDay] = useState("");
+  const [calForm, setCalForm] = useState({ gym: "", memo: "", duration: "1시간", condition: "😐" });
+
   useEffect(() => {
     if (!user) return;
     const savedImg = localStorage.getItem(`profileImg_${user.id}`);
@@ -35,6 +55,7 @@ export default function MyPage() {
     if (savedSet) setSettingDates(JSON.parse(savedSet));
     loadRecords();
     loadMyPosts();
+    loadClimbedDates();
   }, [user]);
 
   async function loadRecords() {
@@ -57,13 +78,25 @@ export default function MyPage() {
     setMyPosts(data || []);
   }
 
+  async function loadClimbedDates() {
+    const { data } = await supabase
+      .from("records")
+      .select("climbed_at, condition")
+      .eq("user_name", myName);
+    const map = {};
+    (data || []).forEach(r => {
+      if (r.climbed_at) map[r.climbed_at] = r.condition || "😐";
+    });
+    setClimbedDates(map);
+  }
+
   function handleProfileImageClick() { imgInputRef.current?.click(); }
 
   function handleImageChange(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = ev => {
       const base64 = ev.target.result;
       setProfileImg(base64);
       localStorage.setItem(`profileImg_${user.id}`, base64);
@@ -100,6 +133,24 @@ export default function MyPage() {
     setRecords(prev => prev.filter(r => r.id !== id));
   }
 
+  async function handleCalRecord() {
+    if (!calForm.gym) return;
+    await supabase.from("records").insert({
+      user_name: myName,
+      gym: calForm.gym,
+      grade: "",
+      result: "",
+      climbed_at: selectedCalDay,
+      memo: calForm.memo,
+      duration: calForm.duration,
+      condition: calForm.condition,
+    });
+    setClimbedDates(prev => ({ ...prev, [selectedCalDay]: calForm.condition }));
+    setShowCalModal(false);
+    setCalForm({ gym: "", memo: "", duration: "1시간", condition: "😐" });
+    loadRecords();
+  }
+
   const signupDate = user?.created_at ? new Date(user.created_at) : new Date();
   const daysSince = Math.max(1, Math.floor((new Date() - signupDate) / (1000 * 60 * 60 * 24)) + 1);
 
@@ -109,6 +160,15 @@ export default function MyPage() {
   }));
   const maxCount = Math.max(...gradeCounts.map(g => g.count), 1);
   const hasGradeData = gradeCounts.some(g => g.count > 0);
+
+  // Calendar helpers
+  const year = calDate.getFullYear();
+  const month = calDate.getMonth();
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const toDateStr = d => `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const calCells = [...Array(firstDayOfWeek).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   return (
     <div className="page">
@@ -161,23 +221,31 @@ export default function MyPage() {
       {/* 내 게시물 그리드 */}
       <p className="section-title">내 게시물</p>
       {myPosts.length === 0 ? (
-        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px 0", fontSize: 13, marginBottom: 16 }}>
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "16px 0 20px", fontSize: 13 }}>
           피드에 올린 게시물이 여기 표시돼요
         </div>
       ) : (
         <div className="post-grid">
-          {myPosts.map(p => (
-            <div className="post-grid-item" key={p.id}>
-              {p.video_url ? (
-                <video src={p.video_url} className="post-grid-thumb" muted />
-              ) : (
-                <div className="post-grid-placeholder">
-                  <span style={{ fontSize: 22 }}>{p.type === "fail" ? "🔴" : "🟡"}</span>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{p.grade || p.type}</span>
-                </div>
-              )}
-            </div>
-          ))}
+          {myPosts.map(p => {
+            const thumb = p.media_urls?.[0] || p.video_url;
+            const isVid = thumb && /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(thumb);
+            return (
+              <div className="post-grid-item" key={p.id}>
+                {thumb ? (
+                  isVid ? (
+                    <video src={thumb} className="post-grid-thumb" muted />
+                  ) : (
+                    <img src={thumb} alt="" className="post-grid-thumb" />
+                  )
+                ) : (
+                  <div className="post-grid-placeholder">
+                    <span style={{ fontSize: 22 }}>📝</span>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>텍스트</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -191,12 +259,12 @@ export default function MyPage() {
       {loadingRecords && (
         <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px 0" }}>불러오는 중...</div>
       )}
-      {!loadingRecords && records.length === 0 && (
-        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px 0", fontSize: 13 }}>
+      {!loadingRecords && records.filter(r => r.result === "성공" || r.result === "실패" || r.result === "시도").length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "16px 0", fontSize: 13 }}>
           기록이 없어요. 추가해보세요!
         </div>
       )}
-      {records.map(r => (
+      {records.filter(r => r.result === "성공" || r.result === "실패" || r.result === "시도").map(r => (
         <div className="record-card" key={r.id}>
           <div className="record-icon">{r.result === "성공" ? "✅" : r.result === "실패" ? "❌" : "🔄"}</div>
           <div className="record-info">
@@ -209,6 +277,35 @@ export default function MyPage() {
             style={{ marginLeft: 10, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18 }}>×</button>
         </div>
       ))}
+
+      {/* 달력 */}
+      <div className="calendar-section">
+        <div className="calendar-nav">
+          <button className="cal-nav-btn" onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>‹</button>
+          <span className="calendar-title">{year}년 {month + 1}월</span>
+          <button className="cal-nav-btn" onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>›</button>
+        </div>
+        <div className="cal-day-labels">
+          {["일","월","화","수","목","금","토"].map(d => (
+            <div key={d} className="cal-day-label">{d}</div>
+          ))}
+        </div>
+        <div className="calendar-grid">
+          {calCells.map((d, i) => {
+            if (!d) return <div key={i} className="cal-cell empty" />;
+            const ds = toDateStr(d);
+            const emoji = climbedDates[ds];
+            const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+            return (
+              <div key={i}
+                className={`cal-cell${emoji ? " climbed" : ""}${isToday && !emoji ? " today" : ""}`}
+                onClick={() => { setSelectedCalDay(ds); setShowCalModal(true); }}>
+                {emoji ? <span className="cal-emoji">{emoji}</span> : d}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* 회원권 모달 */}
       {showMemberModal && (
@@ -261,6 +358,49 @@ export default function MyPage() {
             </div>
             <div className="modal-actions">
               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setShowSettingModal(false); setSettingInput(""); }}>완료</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 달력 기록 모달 */}
+      {showCalModal && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCalModal(false); }}>
+          <div className="modal-sheet">
+            <h3>🧗 {selectedCalDay}</h3>
+            <div className="form-group">
+              <label>암장</label>
+              <input className="form-input" placeholder="예) 더클라임 연남" value={calForm.gym}
+                onChange={e => setCalForm(p => ({ ...p, gym: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>메모</label>
+              <input className="form-input" placeholder="오늘 클라이밍은 어땠나요?"
+                value={calForm.memo}
+                onChange={e => setCalForm(p => ({ ...p, memo: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>운동 시간</label>
+              <select className="form-input" value={calForm.duration}
+                onChange={e => setCalForm(p => ({ ...p, duration: e.target.value }))}>
+                {DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>컨디션</label>
+              <div className="condition-picker">
+                {CONDITIONS.map(c => (
+                  <button key={c}
+                    className={`condition-btn${calForm.condition === c ? " selected" : ""}`}
+                    onClick={() => setCalForm(p => ({ ...p, condition: c }))}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowCalModal(false)}>취소</button>
+              <button className="btn btn-primary" onClick={handleCalRecord}>저장</button>
             </div>
           </div>
         </div>
