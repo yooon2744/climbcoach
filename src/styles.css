@@ -712,4 +712,33 @@ body {
 .login-divider::before { left: 0; }
 .login-divider::after { right: 0; }
 
+/* 소셜 로그인 버튼 */
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.social-btn:hover { opacity: 0.88; }
+.social-btn:active { transform: scale(0.98); }
+
+.social-google {
+  background: #fff;
+  color: #333;
+}
+
+.social-kakao {
+  background: #FEE500;
+  color: #3C1E1E;
+}
+
 .level-count { font-size: 12px; color: var(--text-muted); width: 20px; }
