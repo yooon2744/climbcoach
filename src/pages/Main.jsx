@@ -61,7 +61,7 @@ export default function Main() {
       const media_urls = [];
       for (const file of mediaFiles) {
         const ext = file.name.split(".").pop();
-        const fileName = `${myName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("Videos")
           .upload(fileName, file, { contentType: file.type });
