@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -8,10 +8,14 @@ export default function Main() {
 
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dragOver, setDragOver] = useState(false);
+  const [storyUsers, setStoryUsers] = useState([]);
+  const [selectedStory, setSelectedStory] = useState(null);
   const [commentInputs, setCommentInputs] = useState({});
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadForm, setUploadForm] = useState({ grade: "", type: "fail", description: "" });
+  const [videoFile, setVideoFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => { loadFeed(); }, []);
 
@@ -21,12 +25,38 @@ export default function Main() {
       .from("posts")
       .select("*, comments(*)")
       .order("created_at", { ascending: false });
-    setFeed(data || []);
+    const posts = data || [];
+    setFeed(posts);
+
+    const seen = new Set();
+    const users = [];
+    for (const p of posts) {
+      if (!seen.has(p.user_name)) {
+        seen.add(p.user_name);
+        users.push({ user_name: p.user_name, user_emoji: p.user_emoji });
+      }
+    }
+    setStoryUsers(users);
     setLoading(false);
   }
 
   async function handleUpload() {
     if (!uploadForm.description.trim()) return;
+    setUploading(true);
+
+    let video_url = null;
+    if (videoFile) {
+      const ext = videoFile.name.split(".").pop();
+      const fileName = `${myName}_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(fileName, videoFile, { contentType: videoFile.type });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from("videos").getPublicUrl(fileName);
+        video_url = publicUrl;
+      }
+    }
+
     await supabase.from("posts").insert({
       user_name: myName,
       user_emoji: "🧗",
@@ -34,9 +64,13 @@ export default function Main() {
       type: uploadForm.type,
       description: uploadForm.description,
       likes: 0,
+      video_url,
     });
+
     setUploadForm({ grade: "", type: "fail", description: "" });
+    setVideoFile(null);
     setShowUploadModal(false);
+    setUploading(false);
     loadFeed();
   }
 
@@ -58,15 +92,25 @@ export default function Main() {
     loadFeed();
   }
 
+  const storyPosts = selectedStory ? feed.filter(f => f.user_name === selectedStory) : [];
+
   return (
     <div className="page">
-      <div
-        className={`upload-zone${dragOver ? " drag-over" : ""}`}
-        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={e => { e.preventDefault(); setDragOver(false); setShowUploadModal(true); }}
-        onClick={() => setShowUploadModal(true)}
-      >
+      {/* 스토리 원형 목록 */}
+      {storyUsers.length > 0 && (
+        <div className="story-row">
+          {storyUsers.map(u => (
+            <div className="story-item" key={u.user_name} onClick={() => setSelectedStory(u.user_name)}>
+              <div className="story-ring">
+                <div className="story-avatar">{u.user_emoji}</div>
+              </div>
+              <span className="story-name">{u.user_name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="upload-zone" onClick={() => setShowUploadModal(true)}>
         <div className="upload-icon">🎬</div>
         <h3>실패 영상을 올려보세요</h3>
         <p>클릭해서 피드백 요청 올리기 · 코치들이 댓글로 교정해줘요</p>
@@ -96,10 +140,73 @@ export default function Main() {
         />
       ))}
 
+      {/* 스토리 모달 */}
+      {selectedStory && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSelectedStory(null)}>
+          <div className="modal-sheet story-modal">
+            <div className="story-modal-header">
+              <div className="story-modal-user">
+                <div className="story-ring" style={{ transform: "scale(0.75)" }}>
+                  <div className="story-avatar">
+                    {storyUsers.find(u => u.user_name === selectedStory)?.user_emoji}
+                  </div>
+                </div>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedStory}</span>
+              </div>
+              <button className="story-close-btn" onClick={() => setSelectedStory(null)}>×</button>
+            </div>
+            <div className="story-modal-body">
+              {storyPosts.length === 0 && (
+                <div style={{ textAlign: "center", color: "var(--text-muted)", padding: 32 }}>게시물이 없어요</div>
+              )}
+              {storyPosts.map(item => (
+                <FeedCard
+                  key={item.id}
+                  item={item}
+                  commentValue={commentInputs[item.id] || ""}
+                  onLike={() => handleLike(item.id, item.likes)}
+                  onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
+                  onCommentSubmit={() => handleCommentSubmit(item.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 업로드 모달 */}
       {showUploadModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowUploadModal(false)}>
           <div className="modal-sheet">
             <h3>🎬 피드백 요청 올리기</h3>
+
+            <div className="form-group">
+              <label>영상 첨부 (선택)</label>
+              <div className="video-upload-zone" onClick={() => fileInputRef.current?.click()}>
+                {videoFile ? (
+                  <div style={{ color: "var(--accent)", fontSize: 13 }}>
+                    ✅ {videoFile.name}
+                    <span style={{ marginLeft: 8, color: "var(--text-muted)", fontSize: 11 }}>
+                      ({(videoFile.size / 1024 / 1024).toFixed(1)}MB)
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 28 }}>🎬</span>
+                    <span style={{ fontSize: 13, color: "var(--text-muted)" }}>클릭해서 영상 선택</span>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>mp4, mov 등</span>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                style={{ display: "none" }}
+                onChange={e => setVideoFile(e.target.files[0] || null)}
+              />
+            </div>
+
             <div className="form-row">
               <div className="form-group">
                 <label>난이도</label>
@@ -130,8 +237,10 @@ export default function Main() {
               />
             </div>
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setShowUploadModal(false)}>취소</button>
-              <button className="btn btn-primary" onClick={handleUpload}>올리기</button>
+              <button className="btn btn-ghost" onClick={() => { setShowUploadModal(false); setVideoFile(null); }}>취소</button>
+              <button className="btn btn-primary" onClick={handleUpload} disabled={uploading}>
+                {uploading ? "업로드 중..." : "올리기"}
+              </button>
             </div>
           </div>
         </div>
@@ -156,12 +265,16 @@ function FeedCard({ item, commentValue, onLike, onCommentChange, onCommentSubmit
         {item.grade && <span className="tag tag-grade" style={{ marginLeft: 4 }}>{item.grade}</span>}
       </div>
 
-      <div className="video-thumb">
-        <span className="video-label">
-          <span className={`tag tag-${item.type}`}>{item.type === "fail" ? "🔴 실패" : "🟡 반성공"}</span>
-        </span>
-        <div className="play-btn">▶</div>
-      </div>
+      {item.video_url ? (
+        <video src={item.video_url} controls className="feed-video" playsInline />
+      ) : (
+        <div className="video-thumb">
+          <span className="video-label">
+            <span className={`tag tag-${item.type}`}>{item.type === "fail" ? "🔴 실패" : "🟡 반성공"}</span>
+          </span>
+          <div className="play-btn">▶</div>
+        </div>
+      )}
 
       <div className="feed-card-body">
         <p>{item.description}</p>
