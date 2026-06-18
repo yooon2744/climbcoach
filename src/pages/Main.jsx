@@ -9,8 +9,8 @@ function isVideoUrl(url) {
 export default function Main() {
   const { user } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
-  const myProfileImg = user ? localStorage.getItem(`profileImg_${user.id}`) : null;
 
+  const [myProfileImg, setMyProfileImg] = useState(null);
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [friendNames, setFriendNames] = useState([]);
@@ -32,6 +32,7 @@ export default function Main() {
 
   useEffect(() => {
     if (user) {
+      setMyProfileImg(localStorage.getItem(`profileImg_${user.id}`));
       try {
         const saved = JSON.parse(localStorage.getItem(`likedPosts_${user.id}`) || "[]");
         setLikedPosts(new Set(saved));
@@ -171,6 +172,8 @@ export default function Main() {
           onLike={() => handleLike(item.id, item.likes)}
           onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
           onCommentSubmit={() => handleCommentSubmit(item.id)}
+          myName={myName}
+          myProfileImg={myProfileImg}
         />
       ))}
 
@@ -200,6 +203,8 @@ export default function Main() {
                   onLike={() => handleLike(item.id, item.likes)}
                   onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
                   onCommentSubmit={() => handleCommentSubmit(item.id)}
+                  myName={myName}
+                  myProfileImg={myProfileImg}
                 />
               ))}
             </div>
@@ -256,7 +261,7 @@ export default function Main() {
   );
 }
 
-function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit }) {
+function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, myProfileImg }) {
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showCommentSheet, setShowCommentSheet] = useState(false);
 
@@ -265,11 +270,16 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
     : item.video_url ? [item.video_url] : [];
   const mediaUrls = [...rawUrls].sort((a, b) => (isVideoUrl(b) ? 1 : 0) - (isVideoUrl(a) ? 1 : 0));
   const currentUrl = mediaUrls[mediaIdx];
+  const isMyPost = item.user_name === myName;
 
   return (
     <div className="feed-card">
       <div className="feed-card-header">
-        <div className="avatar" style={{ width: 36, height: 36, fontSize: 16 }}>{item.user_emoji || "🧗"}</div>
+        {isMyPost && myProfileImg ? (
+          <img src={myProfileImg} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+        ) : (
+          <div className="avatar" style={{ width: 36, height: 36, fontSize: 16 }}>{item.user_emoji || "🧗"}</div>
+        )}
         <div className="user-info">
           <h4>{item.user_name}</h4>
           <span>{new Date(item.created_at).toLocaleDateString("ko-KR")}</span>
@@ -313,7 +323,6 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
         <button className="action-btn" onClick={() => setShowCommentSheet(true)}>💬 {comments.length}</button>
       </div>
 
-      {/* 댓글 바텀시트 */}
       {showCommentSheet && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCommentSheet(false); }}>
           <div className="modal-sheet comment-sheet">
@@ -342,7 +351,7 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
               <input className="comment-input" placeholder="피드백을 달아보세요..."
                 value={commentValue}
                 onChange={e => onCommentChange(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && onCommentSubmit()} />
+                onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && onCommentSubmit()} />
               <button className="send-btn" onClick={onCommentSubmit}>전송</button>
             </div>
           </div>

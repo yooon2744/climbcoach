@@ -218,7 +218,7 @@ export default function Board() {
                 placeholder="답글 작성..."
                 value={detailInput}
                 onChange={e => setDetailInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleDetailComment()}
+                onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleDetailComment()}
                 style={{ fontSize: 13, padding: "8px 12px" }}
               />
               <button className="btn btn-primary"

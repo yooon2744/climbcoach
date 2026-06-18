@@ -23,6 +23,10 @@ export default function MyPage() {
 
   const [profileImg, setProfileImg] = useState(null);
   const imgInputRef = useRef(null);
+  const editFileRef = useRef(null);
+
+  const [bio, setBio] = useState("");
+  const [editingBio, setEditingBio] = useState(false);
 
   const [memberships, setMemberships] = useState([]);
   const [settingDates, setSettingDates] = useState([]);
@@ -37,6 +41,8 @@ export default function MyPage() {
   const [showPostModal, setShowPostModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
   const [editDescription, setEditDescription] = useState("");
+  const [editMediaUrls, setEditMediaUrls] = useState([]);
+  const [newMediaFiles, setNewMediaFiles] = useState([]);
 
   const [calDate, setCalDate] = useState(new Date());
   const [climbedDates, setClimbedDates] = useState({});
@@ -52,6 +58,8 @@ export default function MyPage() {
     if (savedMem) setMemberships(JSON.parse(savedMem));
     const savedSet = localStorage.getItem(`settingDates_${user.id}`);
     if (savedSet) setSettingDates(JSON.parse(savedSet));
+    const savedBio = localStorage.getItem(`bio_${user.id}`) || "";
+    setBio(savedBio);
     loadRecords();
     loadMyPosts();
     loadClimbedDates();
@@ -169,19 +177,31 @@ export default function MyPage() {
   function openPostModal(post) {
     setSelectedPost(post);
     setEditDescription(post.description || "");
+    setEditMediaUrls(post.media_urls || (post.video_url ? [post.video_url] : []));
+    setNewMediaFiles([]);
     setShowPostModal(true);
   }
 
   async function handleEditPost() {
     if (!selectedPost) return;
+    const uploadedUrls = [];
+    for (const file of newMediaFiles) {
+      const ext = file.name.split(".").pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("Videos").upload(fileName, file, { contentType: file.type });
+      if (upErr) { alert("파일 업로드 실패: " + upErr.message); return; }
+      const { data: { publicUrl } } = supabase.storage.from("Videos").getPublicUrl(fileName);
+      uploadedUrls.push(publicUrl);
+    }
+    const finalUrls = [...editMediaUrls, ...uploadedUrls];
     const { data, error } = await supabase
       .from("posts")
-      .update({ description: editDescription })
+      .update({ description: editDescription, media_urls: finalUrls })
       .eq("id", selectedPost.id)
       .select();
     if (error) { alert("수정 실패: " + error.message); return; }
     if (!data || data.length === 0) { alert("수정 권한 없음 — Supabase에서 RLS를 꺼주세요.\nALTER TABLE posts DISABLE ROW LEVEL SECURITY;"); return; }
-    setMyPosts(prev => prev.map(p => p.id === selectedPost.id ? { ...p, description: editDescription } : p));
+    setMyPosts(prev => prev.map(p => p.id === selectedPost.id ? { ...p, description: editDescription, media_urls: finalUrls } : p));
     setShowPostModal(false);
   }
 
@@ -230,7 +250,21 @@ export default function MyPage() {
         </div>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageChange} />
         <div className="profile-name">{myName}</div>
-        <div className="profile-gym">{user?.email}</div>
+        {editingBio ? (
+          <input
+            className="bio-input"
+            placeholder="한줄 소개를 입력해보세요"
+            value={bio}
+            onChange={e => setBio(e.target.value)}
+            onBlur={() => { setEditingBio(false); localStorage.setItem(`bio_${user.id}`, bio); }}
+            onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+            autoFocus
+          />
+        ) : (
+          <div className="profile-bio" onClick={() => setEditingBio(true)}>
+            {bio || <span style={{ color: "var(--text-muted)", fontSize: 12 }}>+ 한줄 소개</span>}
+          </div>
+        )}
 
         <div className="stats-row stats-row-4">
           <div className="stat-item">
@@ -443,19 +477,41 @@ export default function MyPage() {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPostModal(false); }}>
           <div className="modal-sheet">
             <h3>📝 게시물 관리</h3>
-            {(() => {
-              const url = selectedPost.media_urls?.[0] || selectedPost.video_url;
-              if (!url) return null;
-              const isVid = /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(url);
-              return (
-                <div style={{ marginBottom: 14, borderRadius: 8, overflow: "hidden" }}>
-                  {isVid
-                    ? <video src={url} style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} controls />
-                    : <img src={url} alt="" style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} />
-                  }
-                </div>
-              );
-            })()}
+            <div className="form-group">
+              <label>사진 / 영상</label>
+              <div className="media-upload-row">
+                {editMediaUrls.map((url, i) => {
+                  const isVid = /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(url);
+                  return (
+                    <div key={`ex-${i}`} className="media-preview-item">
+                      {isVid
+                        ? <video src={url} className="media-preview-thumb" />
+                        : <img src={url} alt="" className="media-preview-thumb" />}
+                      <button className="media-preview-del"
+                        onClick={() => setEditMediaUrls(prev => prev.filter((_, j) => j !== i))}>×</button>
+                    </div>
+                  );
+                })}
+                {newMediaFiles.map((f, i) => (
+                  <div key={`new-${i}`} className="media-preview-item">
+                    {f.type.startsWith("video")
+                      ? <video src={URL.createObjectURL(f)} className="media-preview-thumb" />
+                      : <img src={URL.createObjectURL(f)} alt="" className="media-preview-thumb" />}
+                    <button className="media-preview-del"
+                      onClick={() => setNewMediaFiles(prev => prev.filter((_, j) => j !== i))}>×</button>
+                  </div>
+                ))}
+                {(editMediaUrls.length + newMediaFiles.length) < 10 && (
+                  <div className="media-add-btn" onClick={() => editFileRef.current?.click()}>
+                    <span style={{ fontSize: 22 }}>+</span>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{editMediaUrls.length + newMediaFiles.length}/10</span>
+                  </div>
+                )}
+              </div>
+              <input ref={editFileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }}
+                onChange={e => setNewMediaFiles(prev =>
+                  [...prev, ...Array.from(e.target.files)].slice(0, 10 - editMediaUrls.length))} />
+            </div>
             <div className="form-group">
               <label>상세</label>
               <textarea className="form-input" rows={3} value={editDescription}

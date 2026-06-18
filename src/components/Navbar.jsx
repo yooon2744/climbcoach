@@ -3,6 +3,10 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
+function isVideoUrl(url) {
+  return /\.(mp4|mov|avi|webm|mkv|m4v)(\?|$)/i.test(url);
+}
+
 export default function Navbar() {
   const { user, signOut } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
@@ -18,6 +22,8 @@ export default function Navbar() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [userStats, setUserStats] = useState(null);
+  const [userPosts, setUserPosts] = useState([]);
 
   async function handleSearch(q) {
     setSearchQuery(q);
@@ -35,13 +41,31 @@ export default function Navbar() {
     setSearchQuery("");
     setSearchResults([]);
     setShowDropdown(false);
-    const { data } = await supabase
-      .from("follows")
-      .select("id")
-      .eq("follower", myName)
-      .eq("following", userName)
-      .maybeSingle();
-    setIsFollowing(!!data);
+    setUserStats(null);
+    setUserPosts([]);
+
+    const [
+      { data: followCheck },
+      { data: posts },
+      { data: followers },
+      { data: following },
+    ] = await Promise.all([
+      supabase.from("follows").select("id").eq("follower", myName).eq("following", userName).maybeSingle(),
+      supabase.from("posts").select("id, media_urls, video_url").eq("user_name", userName).order("created_at", { ascending: false }).limit(9),
+      supabase.from("follows").select("follower").eq("following", userName),
+      supabase.from("follows").select("following").eq("follower", userName),
+    ]);
+
+    setIsFollowing(!!followCheck);
+    setUserPosts(posts || []);
+    const names = new Set([
+      ...(followers || []).map(f => f.follower),
+      ...(following || []).map(f => f.following),
+    ]);
+    setUserStats({
+      postCount: (posts || []).length,
+      friendCount: names.size,
+    });
     setSelectedUser(userName);
   }
 
@@ -50,9 +74,11 @@ export default function Navbar() {
       await supabase.from("follows").delete()
         .eq("follower", myName).eq("following", selectedUser);
       setIsFollowing(false);
+      setUserStats(prev => prev ? { ...prev, friendCount: Math.max(0, prev.friendCount - 1) } : prev);
     } else {
       await supabase.from("follows").insert({ follower: myName, following: selectedUser });
       setIsFollowing(true);
+      setUserStats(prev => prev ? { ...prev, friendCount: prev.friendCount + 1 } : prev);
     }
   }
 
@@ -64,7 +90,7 @@ export default function Navbar() {
         <div className="search-wrap">
           <input
             className="search-input"
-            placeholder="클라이머 검색"
+            placeholder="클친찾기"
             value={searchQuery}
             onFocus={() => setShowDropdown(true)}
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
@@ -88,20 +114,63 @@ export default function Navbar() {
         </button>
       </nav>
 
-      {/* 유저 프로필 모달 */}
+      {/* 유저 프로필 모달 (인스타 스타일) */}
       {selectedUser && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelectedUser(null); }}>
-          <div className="modal-sheet" style={{ textAlign: "center" }}>
-            <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--surface2)", border: "3px solid var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, margin: "0 auto 12px" }}>🧗</div>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>{selectedUser}</div>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 24 }}>클라이머</div>
+          <div className="modal-sheet user-profile-sheet">
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+              <button className="story-close-btn" onClick={() => setSelectedUser(null)}>×</button>
+            </div>
+
+            {/* 프로필 헤더 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+              <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--surface2)", border: "3px solid var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, flexShrink: 0 }}>🧗</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 10 }}>{selectedUser}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div style={{ textAlign: "center", background: "var(--surface2)", borderRadius: 8, padding: "6px 0" }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{userStats?.postCount ?? "-"}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>게시물</div>
+                  </div>
+                  <div style={{ textAlign: "center", background: "var(--surface2)", borderRadius: 8, padding: "6px 0" }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{userStats?.friendCount ?? "-"}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>클친</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 팔로우 버튼 */}
             <button
               className={`btn ${isFollowing ? "btn-ghost" : "btn-primary"} btn-full`}
-              style={{ marginBottom: 8 }}
+              style={{ marginBottom: 16 }}
               onClick={handleFollow}>
               {isFollowing ? "✓ 팔로잉" : "+ 팔로우"}
             </button>
-            <button className="btn btn-ghost btn-full" onClick={() => setSelectedUser(null)}>닫기</button>
+
+            {/* 게시물 그리드 */}
+            {userPosts.length > 0 ? (
+              <div className="user-posts-grid">
+                {userPosts.map(p => {
+                  const thumb = p.media_urls?.[0] || p.video_url;
+                  return (
+                    <div key={p.id} className="user-posts-grid-item">
+                      {thumb ? (
+                        isVideoUrl(thumb)
+                          ? <video src={thumb} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "var(--text-muted)" }}>📝</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", color: "var(--text-muted)", fontSize: 13, padding: "16px 0" }}>
+                아직 게시물이 없어요
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1401,6 +1401,47 @@ body {
   display: block;
 }
 
+/* ── BIO ── */
+.profile-bio {
+  font-size: 13px;
+  color: var(--text);
+  text-align: center;
+  padding: 2px 16px 8px;
+  cursor: pointer;
+  min-height: 22px;
+  line-height: 1.4;
+}
+.bio-input {
+  font-size: 13px;
+  text-align: center;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 4px 12px;
+  color: var(--text);
+  outline: none;
+  width: 220px;
+  margin-bottom: 8px;
+}
+
+/* ── USER PROFILE SHEET (검색 프로필) ── */
+.user-profile-sheet {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.user-posts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.user-posts-grid-item {
+  aspect-ratio: 1;
+  background: var(--surface2);
+  overflow: hidden;
+}
+
 /* ── POST DETAIL SHEET ── */
 .post-detail-sheet {
   max-height: 88vh;
