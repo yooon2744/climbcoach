@@ -76,7 +76,11 @@ export default function GymMap() {
       });
     }
 
-    window.kakao.maps.load(initMap);
+    if (window.kakao?.maps?.Map) {
+      initMap();
+    } else {
+      setTimeout(initMap, 500);
+    }
   }, []);
 
   return (

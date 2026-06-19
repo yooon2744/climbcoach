@@ -6,7 +6,10 @@ const REDIRECT_URL = window.location.origin;
 async function signInWithSocial(provider) {
   await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: REDIRECT_URL },
+    options: {
+      redirectTo: REDIRECT_URL,
+      queryParams: { prompt: "select_account" },
+    },
   });
 }
 
