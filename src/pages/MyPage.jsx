@@ -57,6 +57,10 @@ export default function MyPage() {
   const [editingBio, setEditingBio] = useState(false);       // 한줄 소개 편집 모드
   const [editingNickname, setEditingNickname] = useState(false); // 닉네임 편집 모드
   const [nicknameInput, setNicknameInput] = useState("");    // 닉네임 입력값
+  const [heightCm, setHeightCm] = useState("");              // 신장 (cm)
+  const [weightKg, setWeightKg] = useState("");              // 몸무게 (kg)
+  const [editingHeight, setEditingHeight] = useState(false);
+  const [editingWeight, setEditingWeight] = useState(false);
 
   // ── 회원권 & 세팅일정 상태 (localStorage 기반) ───────────────────
   const [memberships, setMemberships] = useState([]);        // 회원권 목록 (문자열 배열)
@@ -141,11 +145,32 @@ export default function MyPage() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  // profiles 테이블에 내 user_name 레코드를 보장
-  // Navbar의 검색이 user_name 기반이므로 로그인 시마다 upsert
+  // profiles 테이블에 내 user_name 레코드를 보장 + 신장/몸무게 로드
   async function upsertProfile() {
     if (!myName) return;
-    await supabase.from("profiles").upsert({ user_name: myName }, { onConflict: "user_name" });
+    const { data } = await supabase
+      .from("profiles")
+      .upsert({ user_name: myName }, { onConflict: "user_name" })
+      .select("height_cm, weight_kg")
+      .maybeSingle();
+    if (data?.height_cm) setHeightCm(String(data.height_cm));
+    if (data?.weight_kg) setWeightKg(String(data.weight_kg));
+  }
+
+  async function saveHeight(val) {
+    setEditingHeight(false);
+    const num = parseInt(val, 10);
+    if (!num || num < 50 || num > 250) return;
+    setHeightCm(String(num));
+    await supabase.from("profiles").update({ height_cm: num }).eq("user_name", myName);
+  }
+
+  async function saveWeight(val) {
+    setEditingWeight(false);
+    const num = parseInt(val, 10);
+    if (!num || num < 20 || num > 300) return;
+    setWeightKg(String(num));
+    await supabase.from("profiles").update({ weight_kg: num }).eq("user_name", myName);
   }
 
   // ── 팔로우 데이터 로드 ────────────────────────────────────────────
@@ -553,6 +578,46 @@ export default function MyPage() {
             <span className="stat-label">세팅일정</span>
           </div>
         </div>
+
+        {/* 신장 / 몸무게 */}
+        <div style={{ display: "flex", gap: 8, marginTop: 10, width: "100%" }}>
+          <div
+            onClick={() => setEditingHeight(true)}
+            style={{ flex: 1, background: "var(--surface2)", borderRadius: 10, padding: "10px 8px", textAlign: "center", cursor: "pointer", border: "1px solid var(--border)" }}>
+            {editingHeight ? (
+              <input
+                type="number" defaultValue={heightCm}
+                onBlur={e => saveHeight(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+                autoFocus
+                style={{ width: "52px", background: "transparent", border: "none", outline: "none", color: "var(--text)", textAlign: "center", fontSize: 15, fontWeight: 700 }}
+              />
+            ) : (
+              <span style={{ fontSize: 15, fontWeight: 700, color: heightCm ? "var(--text)" : "var(--text-muted)" }}>
+                {heightCm ? `${heightCm}` : "+"}
+              </span>
+            )}
+            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>신장 (cm)</div>
+          </div>
+          <div
+            onClick={() => setEditingWeight(true)}
+            style={{ flex: 1, background: "var(--surface2)", borderRadius: 10, padding: "10px 8px", textAlign: "center", cursor: "pointer", border: "1px solid var(--border)" }}>
+            {editingWeight ? (
+              <input
+                type="number" defaultValue={weightKg}
+                onBlur={e => saveWeight(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+                autoFocus
+                style={{ width: "52px", background: "transparent", border: "none", outline: "none", color: "var(--text)", textAlign: "center", fontSize: 15, fontWeight: 700 }}
+              />
+            ) : (
+              <span style={{ fontSize: 15, fontWeight: 700, color: weightKg ? "var(--text)" : "var(--text-muted)" }}>
+                {weightKg ? `${weightKg}` : "+"}
+              </span>
+            )}
+            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>몸무게 (kg)</div>
+          </div>
+        </div>
       </div>
 
       {/* ── 완등 난이도 분포 (기록 있을 때만 표시) ── */}
@@ -675,8 +740,8 @@ export default function MyPage() {
         </div>
       </div>
 
-      {/* ── D+ 카드 (가입일로부터 경과 일수) ── */}
-      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: "16px 20px" }}>
+      {/* ── D+ 카드 (달력 바로 아래에 붙임) ── */}
+      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: "14px 20px", marginTop: 6 }}>
         <span style={{ fontSize: 28, fontWeight: 900, color: "var(--accent)" }}>D+{daysSince}</span>
         <span style={{ fontSize: 13, color: "var(--text-muted)" }}>클라이밍 시작일부터</span>
       </div>

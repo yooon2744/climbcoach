@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);         // 로그인한 유저 (null = 비로그인)
   const [loading, setLoading] = useState(true);   // 초기 세션 로딩 완료 여부
   const [profileImg, setProfileImg] = useState(null); // 프로필 사진 URL
-  const [unreadMessages, setUnreadMessages] = useState(0); // 안 읽은 채팅 메시지 수
+  const [unreadSenders, setUnreadSenders] = useState(new Set()); // 안 읽은 메시지를 보낸 유저명 Set
   const lastMsgCheckRef = useRef(null); // 마지막으로 확인한 메시지 created_at
 
   // ── 1. 앱 시작 시 세션 복원 & 로그인/로그아웃 감지 ──────────────────
@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 2. 새 채팅 메시지 백그라운드 폴링 + 브라우저 알림 ────────────────
+  // ── 2. 새 채팅 메시지 백그라운드 폴링 ────────────────────────────────
   // 로그인한 상태에서 5초마다 나에게 온 새 메시지를 확인한다.
   // Chat 페이지를 열고 있든 아니든 항상 동작한다.
   useEffect(() => {
@@ -56,31 +56,32 @@ export function AuthProvider({ children }) {
       const since = lastMsgCheckRef.current;
       const { data } = await supabase
         .from("messages")
-        .select("id, sender_name, content, created_at")
+        .select("id, sender_name, created_at")
         .eq("receiver_name", myName)
         .gt("created_at", since)
         .order("created_at", { ascending: true });
       if (!data?.length) return;
 
-      // 다음 폴링 기준 시점을 마지막 메시지로 업데이트
       lastMsgCheckRef.current = data[data.length - 1].created_at;
-      setUnreadMessages(prev => prev + data.length);
-
-      // 브라우저 알림 표시 (권한이 있을 때만)
-      if (Notification.permission === "granted") {
-        data.forEach(msg => {
-          new Notification(`💬 ${msg.sender_name}`, { body: msg.content });
-        });
-      }
+      // 새 메시지 발신자들을 Set에 추가 (중복 자동 제거)
+      setUnreadSenders(prev => {
+        const next = new Set(prev);
+        data.forEach(msg => next.add(msg.sender_name));
+        return next;
+      });
     }
 
     const interval = setInterval(checkNewMessages, 5000);
     return () => clearInterval(interval);
   }, [user?.id]);
 
-  // 채팅 페이지 진입 시 호출 → 안 읽은 카운트 초기화
-  function clearUnreadMessages() {
-    setUnreadMessages(0);
+  // 특정 친구와의 채팅을 열 때 → 그 친구의 알림 점 제거
+  function clearUnreadSender(name) {
+    setUnreadSenders(prev => {
+      const next = new Set(prev);
+      next.delete(name);
+      return next;
+    });
   }
 
   // ── 3. 로그인한 유저의 프로필 사진 로드 ─────────────────────────────
@@ -172,7 +173,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut, profileImg, updateProfileImg, updateNickname, unreadMessages, clearUnreadMessages }}>
+    <AuthContext.Provider value={{ user, loading, signOut, profileImg, updateProfileImg, updateNickname, unreadSenders, clearUnreadSender }}>
       {children}
     </AuthContext.Provider>
   );

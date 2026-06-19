@@ -3,16 +3,8 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
 export default function Chat() {
-  const { user, clearUnreadMessages } = useAuth();
+  const { user, unreadSenders, clearUnreadSender } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
-
-  // 채팅 페이지 진입 시: 알림 권한 요청 + 읽지 않은 카운트 초기화
-  useEffect(() => {
-    clearUnreadMessages();
-    if (Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
 
   const [friends, setFriends] = useState([]);
   const [avatarMap, setAvatarMap] = useState({});
@@ -118,24 +110,39 @@ export default function Chat() {
     return (
       <div className="page">
         <p className="section-title">💬 채팅</p>
-        {friends.map(name => (
-          <div key={name}
-            onClick={() => setSelectedFriend(name)}
-            style={{
-              display: "flex", alignItems: "center", gap: 12,
-              padding: "14px 16px", background: "var(--surface)",
-              borderRadius: 12, marginBottom: 8, cursor: "pointer",
-              border: "1px solid var(--border)",
-            }}>
-            {avatarMap[name] ? (
-              <img src={avatarMap[name]} alt="" style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-            ) : (
-              <div style={{ width: 46, height: 46, borderRadius: "50%", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>🧗</div>
-            )}
-            <span style={{ fontWeight: 600, fontSize: 15 }}>{name}</span>
-            <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: 20 }}>›</span>
-          </div>
-        ))}
+        {friends.map(name => {
+          const hasUnread = unreadSenders?.has(name);
+          return (
+            <div key={name}
+              onClick={() => { setSelectedFriend(name); clearUnreadSender(name); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "14px 16px", background: "var(--surface)",
+                borderRadius: 12, marginBottom: 8, cursor: "pointer",
+                border: hasUnread ? "1px solid #ff3b30" : "1px solid var(--border)",
+              }}>
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                {avatarMap[name] ? (
+                  <img src={avatarMap[name]} alt="" style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: 46, height: 46, borderRadius: "50%", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🧗</div>
+                )}
+                {hasUnread && (
+                  <span style={{
+                    position: "absolute", bottom: 1, right: 1,
+                    width: 11, height: 11, background: "#ff3b30",
+                    borderRadius: "50%", border: "2px solid var(--surface)",
+                  }} />
+                )}
+              </div>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>{name}</span>
+              {hasUnread && (
+                <span style={{ marginLeft: "auto", background: "#ff3b30", color: "#fff", borderRadius: 8, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>NEW</span>
+              )}
+              {!hasUnread && <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: 20 }}>›</span>}
+            </div>
+          );
+        })}
       </div>
     );
   }
