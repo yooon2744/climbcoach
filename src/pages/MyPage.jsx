@@ -46,6 +46,14 @@ export default function MyPage() {
   const [editMeetupTitle, setEditMeetupTitle] = useState("");
   const [editMeetupContent, setEditMeetupContent] = useState("");
   const [editMeetupCategory, setEditMeetupCategory] = useState("자유");
+
+  const [userTag, setUserTag] = useState("");
+  const [editingTag, setEditingTag] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [followerCount, setFollowerCount] = useState(0);
+  const [pendingFollowers, setPendingFollowers] = useState([]);
+  const [showFriendModal, setShowFriendModal] = useState(false);
+  const [meetupsExpanded, setMeetupsExpanded] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
   const [editDescription, setEditDescription] = useState("");
   const [editMediaUrls, setEditMediaUrls] = useState([]);
@@ -70,6 +78,7 @@ export default function MyPage() {
     loadMyMeetups();
     loadClimbedDates();
     loadFollows();
+    loadUserTag();
     upsertProfile();
   }, [user]);
 
@@ -79,15 +88,13 @@ export default function MyPage() {
   }
 
   async function loadFollows() {
-    const [{ data: followers }, { data: following }] = await Promise.all([
-      supabase.from("follows").select("follower").eq("following", myName),
-      supabase.from("follows").select("following").eq("follower", myName),
+    const [{ data: allFollowers }, { data: myFollowings }] = await Promise.all([
+      supabase.from("follows").select("follower, status").eq("following", myName),
+      supabase.from("follows").select("following").eq("follower", myName).eq("status", "accepted"),
     ]);
-    const names = new Set([
-      ...(followers || []).map(f => f.follower),
-      ...(following || []).map(f => f.following),
-    ]);
-    setFriendCount(names.size);
+    setFollowerCount((allFollowers || []).length);
+    setPendingFollowers((allFollowers || []).filter(f => f.status === "pending"));
+    setFriendCount((myFollowings || []).length);
   }
 
   async function loadRecords() {
@@ -136,6 +143,28 @@ export default function MyPage() {
       ? { ...m, gym: editMeetupTitle, description: editMeetupContent, activity: editMeetupCategory }
       : m));
     setShowMeetupModal(false);
+  }
+
+  async function loadUserTag() {
+    const { data } = await supabase.from("profiles").select("user_tag").eq("user_name", myName).maybeSingle();
+    setUserTag(data?.user_tag || "");
+  }
+
+  async function handleTagSave() {
+    const trimmed = tagInput.trim().replace(/^@/, "").replace(/\s+/g, "");
+    setEditingTag(false);
+    if (!trimmed || trimmed === userTag) return;
+    const { data: existing } = await supabase.from("profiles").select("user_name").eq("user_tag", trimmed).neq("user_name", myName).maybeSingle();
+    if (existing) { alert("이미 사용 중인 아이디입니다."); return; }
+    await supabase.from("profiles").upsert({ user_name: myName, user_tag: trimmed }, { onConflict: "user_name" });
+    setUserTag(trimmed);
+  }
+
+  async function handleAcceptFollow(followerName) {
+    await supabase.from("follows").update({ status: "accepted" }).eq("follower", followerName).eq("following", myName);
+    await supabase.from("follows").upsert({ follower: myName, following: followerName, status: "accepted" }, { onConflict: "follower,following" });
+    setPendingFollowers(prev => prev.filter(f => f.follower !== followerName));
+    setFriendCount(prev => prev + 1);
   }
 
   async function handleDeleteMeetup() {
@@ -321,6 +350,27 @@ export default function MyPage() {
             {myName} <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>수정</span>
           </div>
         )}
+        {/* @아이디 */}
+        {editingTag ? (
+          <input
+            className="bio-input"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onBlur={handleTagSave}
+            onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+            placeholder="아이디 입력 (@ 제외)"
+            autoFocus
+            style={{ fontSize: 13, textAlign: "center", color: "var(--accent)" }}
+          />
+        ) : (
+          <div
+            onClick={() => { setTagInput(userTag || ""); setEditingTag(true); }}
+            style={{ fontSize: 13, color: userTag ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", marginBottom: 4 }}>
+            {userTag ? `@${userTag}` : <span>+ 아이디 설정 <span style={{ fontSize: 10 }}>수정</span></span>}
+            {userTag && <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 4 }}>수정</span>}
+          </div>
+        )}
+
         {editingBio ? (
           <input
             className="bio-input"
@@ -339,11 +389,18 @@ export default function MyPage() {
 
         <div className="stats-row stats-row-4">
           <div className="stat-item">
-            <span className="stat-val">D+{daysSince}</span>
-            <span className="stat-label">시작</span>
+            <span className="stat-val">{followerCount}</span>
+            <span className="stat-label">팔로워</span>
           </div>
-          <div className="stat-item">
-            <span className="stat-val">{friendCount}</span>
+          <div className="stat-item stat-clickable" onClick={() => setShowFriendModal(true)}>
+            <span className="stat-val" style={{ position: "relative" }}>
+              {friendCount}
+              {pendingFollowers.length > 0 && (
+                <span style={{ position: "absolute", top: -4, right: -10, background: "var(--accent)", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 6, padding: "1px 4px", lineHeight: 1.4 }}>
+                  +{pendingFollowers.length}
+                </span>
+              )}
+            </span>
             <span className="stat-label">클친</span>
           </div>
           <div className="stat-item stat-clickable" onClick={() => setShowMemberModal(true)}>
@@ -412,19 +469,28 @@ export default function MyPage() {
           커뮤니티에 쓴 글이 여기 표시돼요
         </div>
       ) : (
-        myMeetups.map(m => (
-          <div key={m.id} className="community-card" onClick={() => openMeetupModal(m)} style={{ cursor: "pointer" }}>
-            <div className="community-card-top">
-              <span className="community-category-chip">{m.activity || "자유"}</span>
-              <span className="community-date">{new Date(m.created_at).toLocaleDateString("ko-KR")}</span>
+        <div className="card" style={{ padding: "4px 0" }}>
+          {myMeetups.slice(0, meetupsExpanded ? myMeetups.length : 3).map((m, i) => (
+            <div key={m.id} onClick={() => openMeetupModal(m)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderBottom: i < (meetupsExpanded ? myMeetups.length : Math.min(3, myMeetups.length)) - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+                <span className="community-category-chip" style={{ fontSize: 10, flexShrink: 0 }}>{m.activity || "자유"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.gym}</span>
+              </div>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>{new Date(m.created_at).toLocaleDateString("ko-KR")}</span>
             </div>
-            <h3 className="community-title">{m.gym}</h3>
-            {m.description && <p className="community-content">{m.description}</p>}
-          </div>
-        ))
+          ))}
+          {myMeetups.length > 3 && (
+            <div onClick={() => setMeetupsExpanded(prev => !prev)}
+              style={{ textAlign: "center", padding: "10px", fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 600 }}>
+              {meetupsExpanded ? "접기" : `더보기 +${myMeetups.length - 3}개`}
+            </div>
+          )}
+        </div>
       )}
 
       {/* 달력 */}
+      <p className="section-title">내 운동 기록</p>
       <div className="calendar-section">
         <div className="calendar-nav">
           <button className="cal-nav-btn" onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>‹</button>
@@ -458,6 +524,35 @@ export default function MyPage() {
           })}
         </div>
       </div>
+
+      {/* D+ 카드 */}
+      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: "16px 20px" }}>
+        <span style={{ fontSize: 28, fontWeight: 900, color: "var(--accent)" }}>D+{daysSince}</span>
+        <span style={{ fontSize: 13, color: "var(--text-muted)" }}>클라이밍 시작일부터</span>
+      </div>
+
+      {/* 클친 신청 모달 */}
+      {showFriendModal && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowFriendModal(false); }}>
+          <div className="modal-sheet">
+            <h3>클친 신청 {pendingFollowers.length > 0 ? `(${pendingFollowers.length})` : ""}</h3>
+            {pendingFollowers.length === 0 ? (
+              <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "12px 0 8px" }}>새로운 클친 신청이 없어요</div>
+            ) : (
+              pendingFollowers.map(f => (
+                <div key={f.follower} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontWeight: 600 }}>{f.follower}</span>
+                  <button className="btn btn-primary" style={{ padding: "5px 14px", fontSize: 13 }}
+                    onClick={() => handleAcceptFollow(f.follower)}>수락</button>
+                </div>
+              ))
+            )}
+            <div className="modal-actions" style={{ marginTop: 12 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowFriendModal(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 회원권 모달 */}
       {showMemberModal && (
