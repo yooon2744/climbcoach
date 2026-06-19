@@ -97,7 +97,7 @@ export default function MyPage() {
     const { data } = await supabase
       .from("posts")
       .select("*")
-      .eq("user_name", myName)
+      .or(`user_id.eq.${user.id},and(user_id.is.null,user_name.eq.${myName})`)
       .order("created_at", { ascending: false });
     setMyPosts(data || []);
   }

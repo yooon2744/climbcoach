@@ -77,6 +77,7 @@ export default function Main() {
       }
       const { error: insertError } = await supabase.from("posts").insert({
         user_name: myName,
+        user_id: user.id,
         user_emoji: "🧗",
         grade: "",
         type: "post",
@@ -174,6 +175,7 @@ export default function Main() {
           onCommentSubmit={() => handleCommentSubmit(item.id)}
           myName={myName}
           myProfileImg={myProfileImg}
+          userId={user?.id}
         />
       ))}
 
@@ -205,6 +207,7 @@ export default function Main() {
                   onCommentSubmit={() => handleCommentSubmit(item.id)}
                   myName={myName}
                   myProfileImg={myProfileImg}
+                  userId={user?.id}
                 />
               ))}
             </div>
@@ -261,7 +264,7 @@ export default function Main() {
   );
 }
 
-function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, myProfileImg }) {
+function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, myProfileImg, userId }) {
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showCommentSheet, setShowCommentSheet] = useState(false);
 
@@ -270,7 +273,7 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
     : item.video_url ? [item.video_url] : [];
   const mediaUrls = [...rawUrls].sort((a, b) => (isVideoUrl(b) ? 1 : 0) - (isVideoUrl(a) ? 1 : 0));
   const currentUrl = mediaUrls[mediaIdx];
-  const isMyPost = item.user_name === myName;
+  const isMyPost = (item.user_id && item.user_id === userId) || (!item.user_id && item.user_name === myName);
 
   return (
     <div className="feed-card">
