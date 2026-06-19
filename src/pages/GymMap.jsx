@@ -29,52 +29,54 @@ export default function GymMap() {
   const [selectedGym, setSelectedGym] = useState(null);
 
   useEffect(() => {
-    const kakao = window.kakao;
-    if (!kakao?.maps) return;
+    function initMap() {
+      const kakao = window.kakao;
+      const container = mapRef.current;
+      if (!container) return;
 
-    const container = mapRef.current;
-    if (!container) return;
+      const map = new kakao.maps.Map(container, {
+        center: new kakao.maps.LatLng(37.5665, 126.9780),
+        level: 8,
+      });
 
-    const map = new kakao.maps.Map(container, {
-      center: new kakao.maps.LatLng(37.5665, 126.9780),
-      level: 8,
-    });
+      const ps = new kakao.maps.services.Places();
+      const allGyms = new Map();
+      const keywords = ["클라이밍 서울", "볼더링 서울"];
+      let completed = 0;
 
-    const ps = new kakao.maps.services.Places();
-    const allGyms = new Map();
-    const keywords = ["클라이밍 서울", "볼더링 서울"];
-    let completed = 0;
+      function onAllDone() {
+        const list = Array.from(allGyms.values());
+        setGymCount(list.length);
+        setLoading(false);
 
-    function onAllDone() {
-      const list = Array.from(allGyms.values());
-      setGymCount(list.length);
-      setLoading(false);
+        const bounds = new kakao.maps.LatLngBounds();
+        list.forEach(place => {
+          const pos = new kakao.maps.LatLng(place.y, place.x);
+          bounds.extend(pos);
 
-      const bounds = new kakao.maps.LatLngBounds();
-      list.forEach(place => {
-        const pos = new kakao.maps.LatLng(place.y, place.x);
-        bounds.extend(pos);
+          const markerImage = new kakao.maps.MarkerImage(
+            "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png",
+            new kakao.maps.Size(24, 35)
+          );
+          const marker = new kakao.maps.Marker({ map, position: pos, title: place.place_name, image: markerImage });
+          kakao.maps.event.addListener(marker, "click", () => {
+            setSelectedGym(place);
+            map.panTo(pos);
+          });
+        });
 
-        const markerImage = new kakao.maps.MarkerImage(
-          "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png",
-          new kakao.maps.Size(24, 35)
-        );
-        const marker = new kakao.maps.Marker({ map, position: pos, title: place.place_name, image: markerImage });
-        kakao.maps.event.addListener(marker, "click", () => {
-          setSelectedGym(place);
-          map.panTo(pos);
+        if (list.length > 0) map.setBounds(bounds);
+      }
+
+      keywords.forEach(keyword => {
+        searchKeyword(ps, kakao, keyword, allGyms, () => {
+          completed++;
+          if (completed >= keywords.length) onAllDone();
         });
       });
-
-      if (list.length > 0) map.setBounds(bounds);
     }
 
-    keywords.forEach(keyword => {
-      searchKeyword(ps, kakao, keyword, allGyms, () => {
-        completed++;
-        if (completed >= keywords.length) onAllDone();
-      });
-    });
+    window.kakao.maps.load(initMap);
   }, []);
 
   return (
