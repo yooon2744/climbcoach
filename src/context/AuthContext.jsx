@@ -21,10 +21,25 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // user 변경 시 프로필 이미지 로드 (커스텀 업로드 > 구글 사진 순)
+  // profiles 테이블에서 로드 (Google 재로그인해도 덮어쓰이지 않음)
   useEffect(() => {
-    setProfileImg(user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null);
-  }, [user]);
+    if (!user?.id) { setProfileImg(null); return; }
+    const name = user.user_metadata?.name || user.email?.split("@")[0];
+    if (!name) { setProfileImg(null); return; }
+    supabase.from("profiles").select("avatar_url").eq("user_name", name).maybeSingle()
+      .then(({ data }) => {
+        if (data?.avatar_url) {
+          setProfileImg(data.avatar_url);
+        } else {
+          // 커스텀 사진 없으면 Google 사진을 profiles에 저장 (다른 유저도 볼 수 있게)
+          const googlePic = user.user_metadata?.picture;
+          setProfileImg(googlePic || null);
+          if (googlePic) {
+            supabase.from("profiles").upsert({ user_name: name, avatar_url: googlePic }, { onConflict: "user_name" });
+          }
+        }
+      });
+  }, [user?.id]);
 
   // file: File 객체 - Supabase Storage에 업로드 후 profiles 테이블에 URL 저장
   async function updateProfileImg(file) {

@@ -78,8 +78,17 @@ export default function GymMap() {
 
     if (window.kakao?.maps?.Map) {
       initMap();
+    } else if (window.kakao?.maps) {
+      // SDK 로드됐지만 maps 모듈 미초기화 → load 콜백으로 초기화 대기
+      window.kakao.maps.load(initMap);
     } else {
-      setTimeout(initMap, 500);
+      // SDK 자체가 아직 로드 중 → 1초 후 재시도
+      const timer = setTimeout(() => {
+        if (window.kakao?.maps?.Map) initMap();
+        else if (window.kakao?.maps) window.kakao.maps.load(initMap);
+        else setLoading(false);
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, []);
 
