@@ -80,7 +80,7 @@ export default function GymMap() {
   }, []);
 
   return (
-    <div style={{ position: "fixed", top: "var(--nav-height)", left: 0, right: 0, bottom: "var(--bottom-nav-height)", display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "fixed", top: 60, left: 0, right: 0, bottom: 64 }}>
 
       <div style={{
         position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)",
@@ -92,7 +92,7 @@ export default function GymMap() {
         {loading ? "🔍 암장 불러오는 중..." : `🧗 서울 클라이밍 ${gymCount}곳`}
       </div>
 
-      <div ref={mapRef} style={{ flex: 1, width: "100%" }} />
+      <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
 
       {selectedGym && (
         <div style={{
