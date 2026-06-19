@@ -41,29 +41,50 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 2. 새 채팅 메시지 백그라운드 폴링 ────────────────────────────────
-  // 로그인한 상태에서 5초마다 나에게 온 새 메시지를 확인한다.
-  // Chat 페이지를 열고 있든 아니든 항상 동작한다.
+  // ── 2. 새 채팅 메시지 폴링 + 초기 미확인 메시지 로드 ─────────────────
+  // - 앱 시작 시 localStorage의 per-sender 읽은 시간 기준으로 미확인 메시지 로드
+  // - 이후 5초 폴링으로 새 메시지 추가 감지
   useEffect(() => {
     if (!user?.id) return;
     const myName = user.user_metadata?.name || user.email?.split("@")[0];
     if (!myName) return;
 
-    // 폴링 시작 시점 이후의 메시지만 확인 (과거 메시지 알림 방지)
+    // 앱 시작 시 미확인 메시지 초기 로드 (최근 24시간)
+    async function loadInitialUnread() {
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("messages")
+        .select("sender_name, created_at")
+        .eq("receiver_name", myName)
+        .gt("created_at", since24h)
+        .order("created_at", { ascending: false });
+      if (!data?.length) return;
+
+      // per-sender 읽은 시간을 localStorage에서 읽어 아직 안 읽은 발신자만 추출
+      const unread = data.filter(msg => {
+        const clearedAt = localStorage.getItem(`cc_${user.id}_${msg.sender_name}`);
+        return !clearedAt || msg.created_at > clearedAt;
+      });
+      if (unread.length) {
+        setUnreadSenders(new Set(unread.map(m => m.sender_name)));
+      }
+    }
+
+    loadInitialUnread();
     lastMsgCheckRef.current = new Date().toISOString();
 
+    // 5초마다 새 메시지 확인 (앱 시작 이후 도착한 메시지)
     async function checkNewMessages() {
       const since = lastMsgCheckRef.current;
       const { data } = await supabase
         .from("messages")
-        .select("id, sender_name, created_at")
+        .select("sender_name, created_at")
         .eq("receiver_name", myName)
         .gt("created_at", since)
         .order("created_at", { ascending: true });
       if (!data?.length) return;
 
       lastMsgCheckRef.current = data[data.length - 1].created_at;
-      // 새 메시지 발신자들을 Set에 추가 (중복 자동 제거)
       setUnreadSenders(prev => {
         const next = new Set(prev);
         data.forEach(msg => next.add(msg.sender_name));
@@ -75,8 +96,11 @@ export function AuthProvider({ children }) {
     return () => clearInterval(interval);
   }, [user?.id]);
 
-  // 특정 친구와의 채팅을 열 때 → 그 친구의 알림 점 제거
+  // 특정 친구 채팅을 열 때 → 그 친구의 알림 점 제거 + localStorage에 읽은 시간 저장
   function clearUnreadSender(name) {
+    if (user?.id) {
+      localStorage.setItem(`cc_${user.id}_${name}`, new Date().toISOString());
+    }
     setUnreadSenders(prev => {
       const next = new Set(prev);
       next.delete(name);

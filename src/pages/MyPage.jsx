@@ -146,12 +146,14 @@ export default function MyPage() {
   }, []);
 
   // profiles 테이블에 내 user_name 레코드를 보장 + 신장/몸무게 로드
+  // upsert와 select를 분리 — 체이닝 시 Supabase v2에서 반환값 불안정
   async function upsertProfile() {
     if (!myName) return;
+    await supabase.from("profiles").upsert({ user_name: myName }, { onConflict: "user_name" });
     const { data } = await supabase
       .from("profiles")
-      .upsert({ user_name: myName }, { onConflict: "user_name" })
       .select("height_cm, weight_kg")
+      .eq("user_name", myName)
       .maybeSingle();
     if (data?.height_cm) setHeightCm(String(data.height_cm));
     if (data?.weight_kg) setWeightKg(String(data.weight_kg));
@@ -162,7 +164,8 @@ export default function MyPage() {
     const num = parseInt(val, 10);
     if (!num || num < 50 || num > 250) return;
     setHeightCm(String(num));
-    await supabase.from("profiles").update({ height_cm: num }).eq("user_name", myName);
+    // update 대신 upsert 사용 — 행이 없을 경우에도 안전
+    await supabase.from("profiles").upsert({ user_name: myName, height_cm: num }, { onConflict: "user_name" });
   }
 
   async function saveWeight(val) {
@@ -170,7 +173,7 @@ export default function MyPage() {
     const num = parseInt(val, 10);
     if (!num || num < 20 || num > 300) return;
     setWeightKg(String(num));
-    await supabase.from("profiles").update({ weight_kg: num }).eq("user_name", myName);
+    await supabase.from("profiles").upsert({ user_name: myName, weight_kg: num }, { onConflict: "user_name" });
   }
 
   // ── 팔로우 데이터 로드 ────────────────────────────────────────────
