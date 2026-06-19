@@ -7,10 +7,9 @@ function isVideoUrl(url) {
 }
 
 export default function Main() {
-  const { user } = useAuth();
+  const { user, profileImg: myProfileImg } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
 
-  const [myProfileImg, setMyProfileImg] = useState(null);
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [friendNames, setFriendNames] = useState([]);
@@ -32,7 +31,6 @@ export default function Main() {
 
   useEffect(() => {
     if (user) {
-      setMyProfileImg(localStorage.getItem(`profileImg_${user.id}`));
       try {
         const saved = JSON.parse(localStorage.getItem(`likedPosts_${user.id}`) || "[]");
         setLikedPosts(new Set(saved));
@@ -148,7 +146,7 @@ export default function Main() {
                 <div className="story-avatar">{u.user_emoji}</div>
               )}
             </div>
-            <span className="story-name">{u.isMe ? "나" : u.user_name}</span>
+            <span className="story-name">{u.isMe ? myName : u.user_name}</span>
           </div>
         ))}
       </div>
@@ -176,6 +174,8 @@ export default function Main() {
           myName={myName}
           myProfileImg={myProfileImg}
           userId={user?.id}
+          onCommentDeleted={(postId, commentId) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.filter(c => c.id !== commentId) } : p))}
+          onCommentEdited={(postId, commentId, content) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.map(c => c.id === commentId ? { ...c, content } : c) } : p))}
         />
       ))}
 
@@ -208,6 +208,8 @@ export default function Main() {
                   myName={myName}
                   myProfileImg={myProfileImg}
                   userId={user?.id}
+                  onCommentDeleted={(postId, commentId) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.filter(c => c.id !== commentId) } : p))}
+                  onCommentEdited={(postId, commentId, content) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.map(c => c.id === commentId ? { ...c, content } : c) } : p))}
                 />
               ))}
             </div>
@@ -264,9 +266,24 @@ export default function Main() {
   );
 }
 
-function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, myProfileImg, userId }) {
+function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, myProfileImg, userId, onCommentDeleted, onCommentEdited }) {
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showCommentSheet, setShowCommentSheet] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentContent, setEditCommentContent] = useState("");
+
+  async function handleDeleteComment(commentId) {
+    await supabase.from("comments").delete().eq("id", commentId);
+    onCommentDeleted?.(item.id, commentId);
+  }
+
+  async function handleSaveComment(commentId) {
+    const text = editCommentContent.trim();
+    if (!text) return;
+    await supabase.from("comments").update({ content: text }).eq("id", commentId);
+    onCommentEdited?.(item.id, commentId, text);
+    setEditingCommentId(null);
+  }
 
   const comments = item.comments || [];
   const rawUrls = item.media_urls?.length > 0 ? item.media_urls
@@ -292,7 +309,7 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
       {mediaUrls.length > 0 && (
         <div className="carousel-wrap">
           {isVideoUrl(currentUrl) ? (
-            <video key={currentUrl} src={currentUrl} controls className="carousel-item" playsInline />
+            <video key={currentUrl} src={currentUrl} controls controlsList="nodownload" className="carousel-item" playsInline />
           ) : (
             <img key={currentUrl} src={currentUrl} alt="" className="carousel-item" />
           )}
@@ -343,10 +360,30 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
               {comments.map(c => (
                 <div className="comment" key={c.id}>
                   <div className="avatar" style={{ width: 28, height: 28, fontSize: 13 }}>{c.user_emoji || "🧗"}</div>
-                  <div className="comment-bubble">
+                  <div className="comment-bubble" style={{ flex: 1 }}>
                     <div className="comment-user">{c.user_name}</div>
-                    <p>{c.content}</p>
+                    {editingCommentId === c.id ? (
+                      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                        <input
+                          style={{ flex: 1, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", color: "var(--text)", fontSize: 13 }}
+                          value={editCommentContent}
+                          onChange={e => setEditCommentContent(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleSaveComment(c.id)}
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveComment(c.id)} style={{ background: "var(--accent)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>저장</button>
+                        <button onClick={() => setEditingCommentId(null)} style={{ background: "var(--surface2)", border: "none", color: "var(--text-muted)", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer" }}>취소</button>
+                      </div>
+                    ) : (
+                      <p>{c.content}</p>
+                    )}
                   </div>
+                  {c.user_name === myName && editingCommentId !== c.id && (
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button onClick={() => { setEditingCommentId(c.id); setEditCommentContent(c.content); }} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", padding: "2px 4px" }}>수정</button>
+                      <button onClick={() => handleDeleteComment(c.id)} style={{ background: "none", border: "none", color: "#e05a5a", fontSize: 11, cursor: "pointer", padding: "2px 4px" }}>삭제</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

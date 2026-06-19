@@ -18,15 +18,16 @@ const DURATIONS = (() => {
 })();
 
 export default function MyPage() {
-  const { user } = useAuth();
+  const { user, profileImg, updateProfileImg, updateNickname } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
 
-  const [profileImg, setProfileImg] = useState(null);
   const imgInputRef = useRef(null);
   const editFileRef = useRef(null);
 
   const [bio, setBio] = useState("");
   const [editingBio, setEditingBio] = useState(false);
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
 
   const [memberships, setMemberships] = useState([]);
   const [settingDates, setSettingDates] = useState([]);
@@ -52,8 +53,6 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!user) return;
-    const savedImg = localStorage.getItem(`profileImg_${user.id}`);
-    if (savedImg) setProfileImg(savedImg);
     const savedMem = localStorage.getItem(`memberships_${user.id}`);
     if (savedMem) setMemberships(JSON.parse(savedMem));
     const savedSet = localStorage.getItem(`settingDates_${user.id}`);
@@ -129,12 +128,19 @@ export default function MyPage() {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
-      const base64 = ev.target.result;
-      setProfileImg(base64);
-      localStorage.setItem(`profileImg_${user.id}`, base64);
-    };
+    reader.onload = ev => updateProfileImg(ev.target.result);
     reader.readAsDataURL(file);
+  }
+
+  async function handleNicknameChange() {
+    const trimmed = nicknameInput.trim();
+    if (!trimmed || trimmed === myName) { setEditingNickname(false); return; }
+    try {
+      await updateNickname(trimmed);
+      setEditingNickname(false);
+    } catch (err) {
+      alert("닉네임 변경 실패: " + err.message);
+    }
   }
 
   function saveMemberships(list) {
@@ -249,7 +255,22 @@ export default function MyPage() {
           <div className="profile-avatar-edit">+</div>
         </div>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageChange} />
-        <div className="profile-name">{myName}</div>
+        {editingNickname ? (
+          <input
+            className="bio-input"
+            value={nicknameInput}
+            onChange={e => setNicknameInput(e.target.value)}
+            onBlur={handleNicknameChange}
+            onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+            autoFocus
+            style={{ fontSize: 17, fontWeight: 700, textAlign: "center" }}
+          />
+        ) : (
+          <div className="profile-name" onClick={() => { setNicknameInput(myName); setEditingNickname(true); }}
+            style={{ cursor: "pointer" }} title="클릭해서 닉네임 수정">
+            {myName} ✏️
+          </div>
+        )}
         {editingBio ? (
           <input
             className="bio-input"

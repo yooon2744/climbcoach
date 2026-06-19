@@ -15,15 +15,26 @@ export default function Board() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: "", category: "자유", content: "" });
   const [commentCounts, setCommentCounts] = useState({});
+  const [likedMeetups, setLikedMeetups] = useState(new Set());
 
   // 상세 페이지
   const [selectedPost, setSelectedPost] = useState(null);
   const [detailComments, setDetailComments] = useState([]);
   const [detailInput, setDetailInput] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
+  const [editingReplyId, setEditingReplyId] = useState(null);
+  const [editReplyContent, setEditReplyContent] = useState("");
   const submittingRef = useRef(false);
 
-  useEffect(() => { loadPosts(); }, []);
+  useEffect(() => {
+    loadPosts();
+    if (user?.id) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(`likedMeetups_${user.id}`) || "[]");
+        setLikedMeetups(new Set(saved));
+      } catch {}
+    }
+  }, [user?.id]);
 
   async function loadPosts() {
     setLoading(true);
@@ -51,6 +62,7 @@ export default function Board() {
     setSelectedPost(post);
     setDetailComments([]);
     setDetailInput("");
+    setEditingReplyId(null);
     setLoadingComments(true);
     const { data, error } = await supabase
       .from("meetup_comments")
@@ -74,17 +86,7 @@ export default function Board() {
     });
     if (error) {
       submittingRef.current = false;
-      alert(
-        "답글 테이블이 없어요.\nSupabase SQL Editor에서 아래 SQL을 실행해주세요:\n\n" +
-        "CREATE TABLE meetup_comments (\n" +
-        "  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,\n" +
-        "  meetup_id UUID NOT NULL,\n" +
-        "  user_name TEXT NOT NULL,\n" +
-        "  content TEXT NOT NULL,\n" +
-        "  created_at TIMESTAMPTZ DEFAULT NOW()\n" +
-        ");\n" +
-        "ALTER TABLE meetup_comments DISABLE ROW LEVEL SECURITY;"
-      );
+      alert("답글 저장 실패: " + error.message);
       return;
     }
     const { data } = await supabase
@@ -97,6 +99,33 @@ export default function Board() {
     submittingRef.current = false;
   }
 
+  async function handleDeleteReply(replyId) {
+    await supabase.from("meetup_comments").delete().eq("id", replyId);
+    setDetailComments(prev => prev.filter(c => c.id !== replyId));
+    setCommentCounts(prev => ({ ...prev, [selectedPost.id]: Math.max(0, (prev[selectedPost.id] || 1) - 1) }));
+  }
+
+  async function handleSaveReply(replyId) {
+    const text = editReplyContent.trim();
+    if (!text) return;
+    await supabase.from("meetup_comments").update({ content: text }).eq("id", replyId);
+    setDetailComments(prev => prev.map(c => c.id === replyId ? { ...c, content: text } : c));
+    setEditingReplyId(null);
+  }
+
+  async function handleMeetupLike(postId, currentLikes) {
+    if (!user?.id) return;
+    const isLiked = likedMeetups.has(postId);
+    const newLikes = isLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
+    const newSet = new Set(likedMeetups);
+    if (isLiked) newSet.delete(postId); else newSet.add(postId);
+    setLikedMeetups(newSet);
+    localStorage.setItem(`likedMeetups_${user.id}`, JSON.stringify([...newSet]));
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: newLikes } : p));
+    if (selectedPost?.id === postId) setSelectedPost(prev => ({ ...prev, likes: newLikes }));
+    await supabase.from("meetups").update({ likes: newLikes }).eq("id", postId);
+  }
+
   async function handlePost() {
     if (!form.title.trim()) return;
     await supabase.from("meetups").insert({
@@ -105,6 +134,7 @@ export default function Board() {
       description: form.content,
       meet_time: myName,
       max_participants: 0,
+      likes: 0,
     });
     setForm({ title: "", category: "자유", content: "" });
     setShowModal(false);
@@ -157,9 +187,12 @@ export default function Board() {
           <div className="community-footer">
             <span className="community-author">🧗 {p.meet_time || "익명"}</span>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                💬 {commentCounts[p.id] || 0}
-              </span>
+              <button
+                onClick={e => { e.stopPropagation(); handleMeetupLike(p.id, p.likes || 0); }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--text-muted)", padding: 0 }}>
+                {likedMeetups.has(p.id) ? "❤️" : "🤍"} {p.likes || 0}
+              </button>
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>💬 {commentCounts[p.id] || 0}</span>
               {p.meet_time === myName && (
                 <button className="community-del-btn" onClick={e => handleDelete(p.id, e)}>삭제</button>
               )}
@@ -189,6 +222,15 @@ export default function Board() {
               )}
             </div>
 
+            {/* 좋아요 */}
+            <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 0 4px" }}>
+              <button
+                onClick={() => handleMeetupLike(selectedPost.id, selectedPost.likes || 0)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "var(--text)", padding: 0, fontWeight: 600 }}>
+                {likedMeetups.has(selectedPost.id) ? "❤️" : "🤍"} {selectedPost.likes || 0}
+              </button>
+            </div>
+
             <div className="post-detail-divider" />
 
             <div className="post-detail-comment-label">
@@ -205,9 +247,31 @@ export default function Board() {
                 </div>
               )}
               {detailComments.map(c => (
-                <div key={c.id} className="meetup-comment-item">
-                  <span className="meetup-comment-user">🧗 {c.user_name}</span>
-                  <span className="meetup-comment-text">{c.content}</span>
+                <div key={c.id} className="meetup-comment-item" style={{ alignItems: "flex-start" }}>
+                  <div style={{ flex: 1 }}>
+                    <span className="meetup-comment-user">🧗 {c.user_name}</span>
+                    {editingReplyId === c.id ? (
+                      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                        <input
+                          style={{ flex: 1, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", color: "var(--text)", fontSize: 13 }}
+                          value={editReplyContent}
+                          onChange={e => setEditReplyContent(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleSaveReply(c.id)}
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveReply(c.id)} style={{ background: "var(--accent)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>저장</button>
+                        <button onClick={() => setEditingReplyId(null)} style={{ background: "var(--surface2)", border: "none", color: "var(--text-muted)", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer" }}>취소</button>
+                      </div>
+                    ) : (
+                      <span className="meetup-comment-text">{c.content}</span>
+                    )}
+                  </div>
+                  {c.user_name === myName && editingReplyId !== c.id && (
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button onClick={() => { setEditingReplyId(c.id); setEditReplyContent(c.content); }} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", padding: "2px 4px" }}>수정</button>
+                      <button onClick={() => handleDeleteReply(c.id)} style={{ background: "none", border: "none", color: "#e05a5a", fontSize: 11, cursor: "pointer", padding: "2px 4px" }}>삭제</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
