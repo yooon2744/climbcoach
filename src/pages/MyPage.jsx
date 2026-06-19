@@ -54,6 +54,7 @@ export default function MyPage() {
   const [pendingFollowers, setPendingFollowers] = useState([]);
   const [showFriendModal, setShowFriendModal] = useState(false);
   const [meetupsExpanded, setMeetupsExpanded] = useState(false);
+  const [followRefreshKey, setFollowRefreshKey] = useState(0);
   const [selectedPost, setSelectedPost] = useState(null);
   const [editDescription, setEditDescription] = useState("");
   const [editMediaUrls, setEditMediaUrls] = useState([]);
@@ -81,6 +82,20 @@ export default function MyPage() {
     loadUserTag();
     upsertProfile();
   }, [user]);
+
+  // 클친 모달 열릴 때마다 + 수동 새로고침 시 팔로워 데이터 재로드
+  useEffect(() => {
+    if (showFriendModal) loadFollows();
+  }, [showFriendModal, followRefreshKey]);
+
+  // 탭 전환 후 돌아오면 팔로워 데이터 재로드
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadFollows();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   async function upsertProfile() {
     if (!myName) return;
@@ -535,7 +550,13 @@ export default function MyPage() {
       {showFriendModal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowFriendModal(false); }}>
           <div className="modal-sheet">
-            <h3>클친 신청 {pendingFollowers.length > 0 ? `(${pendingFollowers.length})` : ""}</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>클친 신청 {pendingFollowers.length > 0 ? `(${pendingFollowers.length})` : ""}</h3>
+              <button onClick={() => setFollowRefreshKey(k => k + 1)}
+                style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+                새로고침
+              </button>
+            </div>
             {pendingFollowers.length === 0 ? (
               <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "12px 0 8px" }}>새로운 클친 신청이 없어요</div>
             ) : (

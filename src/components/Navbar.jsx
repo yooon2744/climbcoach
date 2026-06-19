@@ -64,11 +64,15 @@ export default function Navbar() {
   async function handleFollow() {
     if (!searchResult || !myName || searchResult.user_name === myName) return;
     if (followStatus) return;
-    await supabase.from("follows").insert({
+    const { error } = await supabase.from("follows").insert({
       follower: myName,
       following: searchResult.user_name,
       status: "pending",
     });
+    if (error) {
+      alert("팔로우 신청 실패: " + error.message);
+      return;
+    }
     setFollowStatus("pending");
   }
 
