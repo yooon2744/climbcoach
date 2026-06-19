@@ -18,7 +18,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, unreadMessages } = useAuth();
   // 닉네임: Google 계정이면 user_metadata.name, 이메일 계정이면 이메일 앞부분
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
 
@@ -217,12 +217,26 @@ export default function Navbar() {
           </svg>
           피드
         </NavLink>
-        <NavLink to="/gymmap" className={({ isActive }) => isActive ? "active" : ""}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-            <circle cx="12" cy="9" r="2.5" />
-          </svg>
-          암장찾기
+        <NavLink to="/chat" className={({ isActive }) => isActive ? "active" : ""}>
+          <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <div style={{ position: "relative" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              {unreadMessages > 0 && (
+                <span style={{
+                  position: "absolute", top: -4, right: -6,
+                  background: "#ff3b30", color: "#fff",
+                  fontSize: 9, fontWeight: 700, borderRadius: 8,
+                  padding: "1px 4px", lineHeight: 1.4, minWidth: 14,
+                  textAlign: "center",
+                }}>
+                  {unreadMessages > 99 ? "99+" : unreadMessages}
+                </span>
+              )}
+            </div>
+            채팅
+          </div>
         </NavLink>
         <NavLink to="/mypage" className={({ isActive }) => isActive ? "active" : ""}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

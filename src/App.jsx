@@ -11,7 +11,7 @@ import Login from "./pages/Login";
 import Main from "./pages/Main";
 import Board from "./pages/Board";
 import MyPage from "./pages/MyPage";
-import GymMap from "./pages/GymMap";
+import Chat from "./pages/Chat";
 
 // 실제 페이지 라우팅을 담당하는 내부 컴포넌트.
 // AuthProvider 안에 있어야 useAuth() 훅을 사용할 수 있다.
@@ -40,8 +40,8 @@ function AppRoutes() {
         <Route path="/" element={<Main />} />
         {/* 커뮤니티 */}
         <Route path="/board" element={<Board />} />
-        {/* 암장 찾기 (카카오맵) */}
-        <Route path="/gymmap" element={<GymMap />} />
+        {/* 채팅 */}
+        <Route path="/chat" element={<Chat />} />
         {/* 마이페이지 */}
         <Route path="/mypage" element={<MyPage />} />
         {/* 알 수 없는 경로는 메인으로 리다이렉트 */}

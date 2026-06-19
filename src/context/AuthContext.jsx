@@ -12,7 +12,7 @@
 //   updateNickname(name)   - 닉네임 변경 + 관련 테이블 일괄 동기화
 // ─────────────────────────────────────────────
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 const AuthContext = createContext(null);
@@ -21,6 +21,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);         // 로그인한 유저 (null = 비로그인)
   const [loading, setLoading] = useState(true);   // 초기 세션 로딩 완료 여부
   const [profileImg, setProfileImg] = useState(null); // 프로필 사진 URL
+  const [unreadMessages, setUnreadMessages] = useState(0); // 안 읽은 채팅 메시지 수
+  const lastMsgCheckRef = useRef(null); // 마지막으로 확인한 메시지 created_at
 
   // ── 1. 앱 시작 시 세션 복원 & 로그인/로그아웃 감지 ──────────────────
   useEffect(() => {
@@ -39,7 +41,49 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 2. 로그인한 유저의 프로필 사진 로드 ─────────────────────────────
+  // ── 2. 새 채팅 메시지 백그라운드 폴링 + 브라우저 알림 ────────────────
+  // 로그인한 상태에서 5초마다 나에게 온 새 메시지를 확인한다.
+  // Chat 페이지를 열고 있든 아니든 항상 동작한다.
+  useEffect(() => {
+    if (!user?.id) return;
+    const myName = user.user_metadata?.name || user.email?.split("@")[0];
+    if (!myName) return;
+
+    // 폴링 시작 시점 이후의 메시지만 확인 (과거 메시지 알림 방지)
+    lastMsgCheckRef.current = new Date().toISOString();
+
+    async function checkNewMessages() {
+      const since = lastMsgCheckRef.current;
+      const { data } = await supabase
+        .from("messages")
+        .select("id, sender_name, content, created_at")
+        .eq("receiver_name", myName)
+        .gt("created_at", since)
+        .order("created_at", { ascending: true });
+      if (!data?.length) return;
+
+      // 다음 폴링 기준 시점을 마지막 메시지로 업데이트
+      lastMsgCheckRef.current = data[data.length - 1].created_at;
+      setUnreadMessages(prev => prev + data.length);
+
+      // 브라우저 알림 표시 (권한이 있을 때만)
+      if (Notification.permission === "granted") {
+        data.forEach(msg => {
+          new Notification(`💬 ${msg.sender_name}`, { body: msg.content });
+        });
+      }
+    }
+
+    const interval = setInterval(checkNewMessages, 5000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
+  // 채팅 페이지 진입 시 호출 → 안 읽은 카운트 초기화
+  function clearUnreadMessages() {
+    setUnreadMessages(0);
+  }
+
+  // ── 3. 로그인한 유저의 프로필 사진 로드 ─────────────────────────────
   // user.id가 바뀔 때만 실행 (계정 전환 시)
   // localStorage가 아닌 profiles 테이블에서 읽기 때문에
   // Google 재로그인해도 커스텀 사진이 구글 사진으로 덮어씌워지지 않는다.
@@ -128,7 +172,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut, profileImg, updateProfileImg, updateNickname }}>
+    <AuthContext.Provider value={{ user, loading, signOut, profileImg, updateProfileImg, updateNickname, unreadMessages, clearUnreadMessages }}>
       {children}
     </AuthContext.Provider>
   );
