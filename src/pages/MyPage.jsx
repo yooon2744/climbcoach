@@ -112,13 +112,17 @@ export default function MyPage() {
   // user가 세팅되면 (로그인 완료 후) 모든 데이터를 불러온다.
   useEffect(() => {
     if (!user) return;
-    // localStorage에서 회원권/세팅일정/소개 복원
+    // localStorage에서 회원권/세팅일정/소개/신장/몸무게 복원
     const savedMem = localStorage.getItem(`memberships_${user.id}`);
     if (savedMem) setMemberships(JSON.parse(savedMem));
     const savedSet = localStorage.getItem(`settingDates_${user.id}`);
     if (savedSet) setSettingDates(JSON.parse(savedSet));
     const savedBio = localStorage.getItem(`bio_${user.id}`) || "";
     setBio(savedBio);
+    const savedH = localStorage.getItem(`height_${user.id}`);
+    if (savedH) setHeightCm(savedH);
+    const savedW = localStorage.getItem(`weight_${user.id}`);
+    if (savedW) setWeightKg(savedW);
     // DB에서 나머지 데이터 로드
     loadRecords();
     loadMyPosts();
@@ -164,7 +168,7 @@ export default function MyPage() {
     const num = parseInt(val, 10);
     if (!num || num < 50 || num > 250) return;
     setHeightCm(String(num));
-    // update 대신 upsert 사용 — 행이 없을 경우에도 안전
+    localStorage.setItem(`height_${user.id}`, String(num)); // 로컬 저장 (DB 실패해도 유지)
     await supabase.from("profiles").upsert({ user_name: myName, height_cm: num }, { onConflict: "user_name" });
   }
 
@@ -173,6 +177,7 @@ export default function MyPage() {
     const num = parseInt(val, 10);
     if (!num || num < 20 || num > 300) return;
     setWeightKg(String(num));
+    localStorage.setItem(`weight_${user.id}`, String(num)); // 로컬 저장
     await supabase.from("profiles").upsert({ user_name: myName, weight_kg: num }, { onConflict: "user_name" });
   }
 
