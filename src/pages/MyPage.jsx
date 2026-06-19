@@ -225,7 +225,10 @@ export default function MyPage() {
   }
 
   const signupDate = user?.created_at ? new Date(user.created_at) : new Date();
-  const daysSince = Math.max(1, Math.floor((new Date() - signupDate) / (1000 * 60 * 60 * 24)) + 1);
+  const _now = new Date();
+  const _todayMid = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
+  const _signupMid = new Date(signupDate.getFullYear(), signupDate.getMonth(), signupDate.getDate());
+  const daysSince = Math.max(1, Math.floor((_todayMid - _signupMid) / (1000 * 60 * 60 * 24)) + 1);
 
   const gradeCounts = GRADES.map(g => ({
     grade: g,
@@ -254,6 +257,9 @@ export default function MyPage() {
           )}
           <div className="profile-avatar-edit">+</div>
         </div>
+        <div onClick={handleProfileImageClick} style={{ fontSize: 11, color: "var(--accent)", textAlign: "center", marginBottom: 8, cursor: "pointer" }}>
+          사진 변경
+        </div>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageChange} />
         {editingNickname ? (
           <input
@@ -267,8 +273,8 @@ export default function MyPage() {
           />
         ) : (
           <div className="profile-name" onClick={() => { setNicknameInput(myName); setEditingNickname(true); }}
-            style={{ cursor: "pointer" }} title="클릭해서 닉네임 수정">
-            {myName} ✏️
+            style={{ cursor: "pointer" }}>
+            {myName} <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>수정</span>
           </div>
         )}
         {editingBio ? (

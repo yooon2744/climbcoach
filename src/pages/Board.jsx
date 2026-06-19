@@ -6,7 +6,7 @@ const CATEGORIES = ["번개모임", "질문", "후기", "자유"];
 const FILTERS = ["전체", ...CATEGORIES];
 
 export default function Board() {
-  const { user } = useAuth();
+  const { user, profileImg: myProfileImg } = useAuth();
   const myName = user?.user_metadata?.name || user?.email?.split("@")[0] || "나";
 
   const [posts, setPosts] = useState([]);
@@ -249,7 +249,12 @@ export default function Board() {
               {detailComments.map(c => (
                 <div key={c.id} className="meetup-comment-item" style={{ alignItems: "flex-start" }}>
                   <div style={{ flex: 1 }}>
-                    <span className="meetup-comment-user">🧗 {c.user_name}</span>
+                    <span className="meetup-comment-user">
+                      {c.user_name === myName && myProfileImg ? (
+                        <img src={myProfileImg} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", verticalAlign: "middle", marginRight: 4 }} />
+                      ) : "🧗 "}
+                      {c.user_name}
+                    </span>
                     {editingReplyId === c.id ? (
                       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                         <input

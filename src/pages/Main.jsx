@@ -359,7 +359,11 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
               )}
               {comments.map(c => (
                 <div className="comment" key={c.id}>
-                  <div className="avatar" style={{ width: 28, height: 28, fontSize: 13 }}>{c.user_emoji || "🧗"}</div>
+                  {c.user_name === myName && myProfileImg ? (
+                    <img src={myProfileImg} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                  ) : (
+                    <div className="avatar" style={{ width: 28, height: 28, fontSize: 13 }}>{c.user_emoji || "🧗"}</div>
+                  )}
                   <div className="comment-bubble" style={{ flex: 1 }}>
                     <div className="comment-user">{c.user_name}</div>
                     {editingCommentId === c.id ? (

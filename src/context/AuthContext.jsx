@@ -46,6 +46,8 @@ export function AuthProvider({ children }) {
     if (error) throw error;
     if (oldName) {
       await supabase.from("profiles").update({ user_name: newName }).eq("user_name", oldName);
+      await supabase.from("comments").update({ user_name: newName }).eq("user_name", oldName);
+      await supabase.from("meetup_comments").update({ user_name: newName }).eq("user_name", oldName);
     } else {
       await supabase.from("profiles").upsert({ user_name: newName }, { onConflict: "user_name" });
     }
