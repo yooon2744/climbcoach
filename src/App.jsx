@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Main from "./pages/Main";
 import Board from "./pages/Board";
 import MyPage from "./pages/MyPage";
+import GymMap from "./pages/GymMap";
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -25,6 +26,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<Main />} />
         <Route path="/board" element={<Board />} />
+        <Route path="/gymmap" element={<GymMap />} />
         <Route path="/mypage" element={<MyPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
