@@ -3,12 +3,16 @@
 // 마이페이지 - 가장 복잡한 페이지.
 //
 // 구성 섹션 (위에서 아래 순서):
-//   1. 프로필 카드 (사진/닉네임/@아이디/한줄소개/통계)
+//   1. 프로필 카드 (사진/닉네임/@아이디/한줄소개/통계/신장·몸무게)
 //   2. 완등 난이도 분포 막대 그래프
 //   3. 내 게시물 그리드 (클릭하면 수정/삭제 모달)
 //   4. 내 커뮤니티 글 목록 (최대 3개 + 더보기)
 //   5. 운동 달력 (날짜 클릭하면 기록 추가/수정)
-//   6. D+ 카드 (클라이밍 시작일로부터 경과일)
+//   6. D+ 카드 (달력 바로 아래, 클라이밍 시작일로부터 경과일)
+//
+// 신장/몸무게 저장 방식:
+//   localStorage 우선 저장 (DB 컬럼 없어도 유지)
+//   + Supabase profiles 테이블 upsert 동시 시도 (크로스 디바이스 동기화용)
 //
 // 모달 목록:
 //   팔로잉 목록 / 클친+신청 대기 / 회원권 / 세팅일정 / 달력 기록 / 커뮤니티 글 편집 / 피드 게시물 편집
@@ -163,21 +167,24 @@ export default function MyPage() {
     if (data?.weight_kg) setWeightKg(String(data.weight_kg));
   }
 
+  // ── 신장/몸무게 저장 ──────────────────────────────────────────────
+  // localStorage에 항상 저장 (DB 컬럼 없어도 새로고침 후 유지됨)
+  // DB upsert도 함께 시도 — Supabase에 height_cm/weight_kg 컬럼이 있으면 동기화
   async function saveHeight(val) {
     setEditingHeight(false);
     const num = parseInt(val, 10);
-    if (!num || num < 50 || num > 250) return;
+    if (!num || num < 50 || num > 250) return; // 유효 범위 외 입력 무시
     setHeightCm(String(num));
-    localStorage.setItem(`height_${user.id}`, String(num)); // 로컬 저장 (DB 실패해도 유지)
+    localStorage.setItem(`height_${user.id}`, String(num));
     await supabase.from("profiles").upsert({ user_name: myName, height_cm: num }, { onConflict: "user_name" });
   }
 
   async function saveWeight(val) {
     setEditingWeight(false);
     const num = parseInt(val, 10);
-    if (!num || num < 20 || num > 300) return;
+    if (!num || num < 20 || num > 300) return; // 유효 범위 외 입력 무시
     setWeightKg(String(num));
-    localStorage.setItem(`weight_${user.id}`, String(num)); // 로컬 저장
+    localStorage.setItem(`weight_${user.id}`, String(num));
     await supabase.from("profiles").upsert({ user_name: myName, weight_kg: num }, { onConflict: "user_name" });
   }
 

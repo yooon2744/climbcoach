@@ -1,15 +1,22 @@
 // ─────────────────────────────────────────────
 // AuthContext.jsx
-// 앱 전체에서 사용하는 로그인 정보와 프로필 관련 함수들을 관리한다.
+// 앱 전체에서 사용하는 로그인 정보, 프로필, 채팅 알림을 관리한다.
 // 어느 컴포넌트에서든 useAuth()로 꺼내 쓸 수 있다.
 //
 // 제공하는 값:
-//   user           - 현재 로그인한 Supabase 유저 객체 (null이면 비로그인)
-//   loading        - 초기 세션 확인 중 여부
-//   profileImg     - 현재 유저의 프로필 사진 URL (localStorage 아닌 DB 기반)
-//   signOut        - 로그아웃 함수
+//   user                   - 현재 로그인한 Supabase 유저 객체 (null이면 비로그인)
+//   loading                - 초기 세션 확인 중 여부
+//   profileImg             - 현재 유저의 프로필 사진 URL (localStorage 아닌 DB 기반)
+//   signOut                - 로그아웃 함수
 //   updateProfileImg(file) - 프로필 사진 업로드 + DB 저장 + 즉시 반영
 //   updateNickname(name)   - 닉네임 변경 + 관련 테이블 일괄 동기화
+//   unreadSenders          - 안 읽은 메시지 발신자 닉네임 Set (채팅 알림 뱃지용)
+//   clearUnreadSender(name)- 특정 친구의 알림 점 제거 + localStorage에 읽은 시간 저장
+//
+// 채팅 알림 흐름:
+//   앱 시작 시 최근 24시간 메시지를 확인 → localStorage의 per-sender 읽은 시간과 비교
+//   → 아직 안 읽은 발신자 Set에 추가 → Navbar 빨간 점 / 채팅 목록 NEW 배지 표시
+//   이후 5초 폴링으로 새 메시지 추가 감지
 // ─────────────────────────────────────────────
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
