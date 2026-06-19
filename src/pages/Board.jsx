@@ -16,6 +16,7 @@ export default function Board() {
   const [form, setForm] = useState({ title: "", category: "자유", content: "" });
   const [commentCounts, setCommentCounts] = useState({});
   const [likedMeetups, setLikedMeetups] = useState(new Set());
+  const [avatarMap, setAvatarMap] = useState({});
 
   // 상세 페이지
   const [selectedPost, setSelectedPost] = useState(null);
@@ -36,6 +37,21 @@ export default function Board() {
     }
   }, [user?.id]);
 
+  // 내 프로필 사진 바뀌면 avatarMap에 즉시 반영
+  useEffect(() => {
+    if (myName) {
+      setAvatarMap(prev => ({ ...prev, [myName]: myProfileImg || null }));
+    }
+  }, [myName, myProfileImg]);
+
+  async function loadProfiles(names) {
+    if (!names.length) return;
+    const { data } = await supabase.from("profiles").select("user_name, avatar_url").in("user_name", names);
+    const map = {};
+    data?.forEach(p => { if (p.avatar_url) map[p.user_name] = p.avatar_url; });
+    setAvatarMap(prev => ({ ...prev, ...map }));
+  }
+
   async function loadPosts() {
     setLoading(true);
     const { data } = await supabase
@@ -55,6 +71,8 @@ export default function Board() {
         counts.forEach(c => { map[c.meetup_id] = (map[c.meetup_id] || 0) + 1; });
         setCommentCounts(map);
       }
+      const names = [...new Set(data.map(p => p.meet_time).filter(Boolean))];
+      loadProfiles(names);
     }
   }
 
@@ -70,7 +88,11 @@ export default function Board() {
       .eq("meetup_id", post.id)
       .order("created_at", { ascending: true });
     setLoadingComments(false);
-    if (!error) setDetailComments(data || []);
+    if (!error) {
+      setDetailComments(data || []);
+      const names = [...new Set((data || []).map(c => c.user_name).filter(Boolean))];
+      loadProfiles(names);
+    }
   }
 
   async function handleDetailComment() {
@@ -185,7 +207,12 @@ export default function Board() {
           <h3 className="community-title">{p.gym}</h3>
           {p.description && <p className="community-content">{p.description}</p>}
           <div className="community-footer">
-            <span className="community-author">🧗 {p.meet_time || "익명"}</span>
+            <span className="community-author">
+              {avatarMap[p.meet_time] ? (
+                <img src={avatarMap[p.meet_time]} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", verticalAlign: "middle", marginRight: 4 }} />
+              ) : "🧗 "}
+              {p.meet_time || "익명"}
+            </span>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button
                 onClick={e => { e.stopPropagation(); handleMeetupLike(p.id, p.likes || 0); }}
@@ -215,7 +242,10 @@ export default function Board() {
               <p className="post-detail-body">{selectedPost.description}</p>
             )}
             <div className="post-detail-meta">
-              🧗 {selectedPost.meet_time || "익명"} · {new Date(selectedPost.created_at).toLocaleDateString("ko-KR")}
+              {avatarMap[selectedPost.meet_time] ? (
+                <img src={avatarMap[selectedPost.meet_time]} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", verticalAlign: "middle", marginRight: 4 }} />
+              ) : "🧗 "}
+              {selectedPost.meet_time || "익명"} · {new Date(selectedPost.created_at).toLocaleDateString("ko-KR")}
               {selectedPost.meet_time === myName && (
                 <button className="community-del-btn" style={{ marginLeft: 8 }}
                   onClick={e => handleDelete(selectedPost.id, e)}>삭제</button>
@@ -250,8 +280,8 @@ export default function Board() {
                 <div key={c.id} className="meetup-comment-item" style={{ alignItems: "flex-start" }}>
                   <div style={{ flex: 1 }}>
                     <span className="meetup-comment-user">
-                      {c.user_name === myName && myProfileImg ? (
-                        <img src={myProfileImg} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", verticalAlign: "middle", marginRight: 4 }} />
+                      {avatarMap[c.user_name] ? (
+                        <img src={avatarMap[c.user_name]} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", verticalAlign: "middle", marginRight: 4 }} />
                       ) : "🧗 "}
                       {c.user_name}
                     </span>

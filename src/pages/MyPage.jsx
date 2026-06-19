@@ -124,12 +124,14 @@ export default function MyPage() {
 
   function handleProfileImageClick() { imgInputRef.current?.click(); }
 
-  function handleImageChange(e) {
+  async function handleImageChange(e) {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => updateProfileImg(ev.target.result);
-    reader.readAsDataURL(file);
+    try {
+      await updateProfileImg(file);
+    } catch (err) {
+      alert("사진 업로드 실패: " + err.message);
+    }
   }
 
   async function handleNicknameChange() {
@@ -256,9 +258,6 @@ export default function MyPage() {
             <div className="profile-avatar">🧗</div>
           )}
           <div className="profile-avatar-edit">+</div>
-        </div>
-        <div onClick={handleProfileImageClick} style={{ fontSize: 11, color: "var(--accent)", textAlign: "center", marginBottom: 8, cursor: "pointer" }}>
-          사진 변경
         </div>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageChange} />
         {editingNickname ? (

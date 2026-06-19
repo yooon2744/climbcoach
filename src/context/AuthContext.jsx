@@ -21,23 +21,29 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // user 바뀔 때마다 profileImg 로드 (localStorage)
+  // user 변경 시 프로필 이미지 로드 (커스텀 업로드 > 구글 사진 순)
   useEffect(() => {
-    if (user?.id) {
-      setProfileImg(localStorage.getItem(`profileImg_${user.id}`) || null);
-    } else {
-      setProfileImg(null);
-    }
-  }, [user?.id]);
+    setProfileImg(user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null);
+  }, [user]);
 
-  function updateProfileImg(base64) {
-    if (!user?.id) return;
-    if (base64) {
-      localStorage.setItem(`profileImg_${user.id}`, base64);
-    } else {
-      localStorage.removeItem(`profileImg_${user.id}`);
+  // file: File 객체 - Supabase Storage에 업로드 후 profiles 테이블에 URL 저장
+  async function updateProfileImg(file) {
+    if (!user?.id || !file) return;
+    const fileName = `avatars/avatar_${user.id}`;
+    const { error: upErr } = await supabase.storage.from("Videos").upload(fileName, file, {
+      contentType: file.type,
+      upsert: true,
+    });
+    if (upErr) throw upErr;
+    const { data: { publicUrl } } = supabase.storage.from("Videos").getPublicUrl(fileName);
+    const url = `${publicUrl}?t=${Date.now()}`;
+    // auth metadata에 저장 → onAuthStateChange → user 갱신 → profileImg 갱신
+    await supabase.auth.updateUser({ data: { avatar_url: url } });
+    // profiles 테이블에도 저장 (다른 유저들이 볼 수 있게)
+    const myName = user.user_metadata?.name || user.email?.split("@")[0];
+    if (myName) {
+      await supabase.from("profiles").upsert({ user_name: myName, avatar_url: url }, { onConflict: "user_name" });
     }
-    setProfileImg(base64);
   }
 
   async function updateNickname(newName) {

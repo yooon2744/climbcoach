@@ -21,6 +21,7 @@ export default function Main() {
   const [description, setDescription] = useState("");
   const [mediaFiles, setMediaFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [avatarMap, setAvatarMap] = useState({});
   const fileInputRef = useRef(null);
   const commentSubmittingRef = useRef({});
 
@@ -38,6 +39,13 @@ export default function Main() {
     }
   }, [user]);
 
+  // 내 프로필 사진 바뀌면 avatarMap에도 즉시 반영
+  useEffect(() => {
+    if (myName) {
+      setAvatarMap(prev => ({ ...prev, [myName]: myProfileImg || null }));
+    }
+  }, [myName, myProfileImg]);
+
   async function loadFeed() {
     setLoading(true);
     const { data } = await supabase
@@ -48,6 +56,20 @@ export default function Main() {
     setFeed(posts);
     setMyHasPosts(posts.some(p => p.user_name === myName));
     setLoading(false);
+
+    // 피드에 등장하는 모든 유저의 프로필 사진 로드
+    if (posts.length) {
+      const names = [...new Set([
+        ...posts.map(p => p.user_name),
+        ...posts.flatMap(p => (p.comments || []).map(c => c.user_name)),
+      ].filter(Boolean))];
+      if (names.length) {
+        const { data: profs } = await supabase.from("profiles").select("user_name, avatar_url").in("user_name", names);
+        const map = {};
+        profs?.forEach(p => { if (p.avatar_url) map[p.user_name] = p.avatar_url; });
+        setAvatarMap(prev => ({ ...prev, ...map }));
+      }
+    }
   }
 
   async function loadFriendStories() {
@@ -140,8 +162,8 @@ export default function Main() {
           <div className="story-item" key={u.user_name}
             onClick={() => setSelectedStory(u.user_name)}>
             <div className={`story-ring${u.hasPosts ? "" : " story-ring-inactive"}`}>
-              {u.profileImg ? (
-                <img src={u.profileImg} alt="" className="story-avatar story-avatar-photo" />
+              {avatarMap[u.user_name] ? (
+                <img src={avatarMap[u.user_name]} alt="" className="story-avatar story-avatar-photo" />
               ) : (
                 <div className="story-avatar">{u.user_emoji}</div>
               )}
@@ -172,8 +194,7 @@ export default function Main() {
           onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
           onCommentSubmit={() => handleCommentSubmit(item.id)}
           myName={myName}
-          myProfileImg={myProfileImg}
-          userId={user?.id}
+          avatarMap={avatarMap}
           onCommentDeleted={(postId, commentId) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.filter(c => c.id !== commentId) } : p))}
           onCommentEdited={(postId, commentId, content) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.map(c => c.id === commentId ? { ...c, content } : c) } : p))}
         />
@@ -188,7 +209,11 @@ export default function Main() {
             <div className="story-modal-header">
               <div className="story-modal-user">
                 <div className="story-ring" style={{ transform: "scale(0.72)" }}>
-                  <div className="story-avatar">🧗</div>
+                  {avatarMap[selectedStory] ? (
+                    <img src={avatarMap[selectedStory]} alt="" className="story-avatar story-avatar-photo" />
+                  ) : (
+                    <div className="story-avatar">🧗</div>
+                  )}
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedStory}</span>
               </div>
@@ -206,8 +231,8 @@ export default function Main() {
                   onCommentChange={v => setCommentInputs(prev => ({ ...prev, [item.id]: v }))}
                   onCommentSubmit={() => handleCommentSubmit(item.id)}
                   myName={myName}
-                  myProfileImg={myProfileImg}
                   userId={user?.id}
+                  avatarMap={avatarMap}
                   onCommentDeleted={(postId, commentId) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.filter(c => c.id !== commentId) } : p))}
                   onCommentEdited={(postId, commentId, content) => setFeed(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.map(c => c.id === commentId ? { ...c, content } : c) } : p))}
                 />
@@ -266,7 +291,7 @@ export default function Main() {
   );
 }
 
-function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, myProfileImg, userId, onCommentDeleted, onCommentEdited }) {
+function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onCommentSubmit, myName, onCommentDeleted, onCommentEdited, avatarMap }) {
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showCommentSheet, setShowCommentSheet] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState(null);
@@ -290,13 +315,12 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
     : item.video_url ? [item.video_url] : [];
   const mediaUrls = [...rawUrls].sort((a, b) => (isVideoUrl(b) ? 1 : 0) - (isVideoUrl(a) ? 1 : 0));
   const currentUrl = mediaUrls[mediaIdx];
-  const isMyPost = (item.user_id && item.user_id === userId) || (!item.user_id && item.user_name === myName);
 
   return (
     <div className="feed-card">
       <div className="feed-card-header">
-        {isMyPost && myProfileImg ? (
-          <img src={myProfileImg} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+        {avatarMap?.[item.user_name] ? (
+          <img src={avatarMap[item.user_name]} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
         ) : (
           <div className="avatar" style={{ width: 36, height: 36, fontSize: 16 }}>{item.user_emoji || "🧗"}</div>
         )}
@@ -359,8 +383,8 @@ function FeedCard({ item, commentValue, isLiked, onLike, onCommentChange, onComm
               )}
               {comments.map(c => (
                 <div className="comment" key={c.id}>
-                  {c.user_name === myName && myProfileImg ? (
-                    <img src={myProfileImg} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                  {avatarMap?.[c.user_name] ? (
+                    <img src={avatarMap[c.user_name]} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                   ) : (
                     <div className="avatar" style={{ width: 28, height: 28, fontSize: 13 }}>{c.user_emoji || "🧗"}</div>
                   )}
