@@ -39,7 +39,13 @@ export default function MyPage() {
   const [records, setRecords] = useState([]);
   const [friendCount, setFriendCount] = useState(0);
   const [myPosts, setMyPosts] = useState([]);
+  const [myMeetups, setMyMeetups] = useState([]);
   const [showPostModal, setShowPostModal] = useState(false);
+  const [showMeetupModal, setShowMeetupModal] = useState(false);
+  const [selectedMeetup, setSelectedMeetup] = useState(null);
+  const [editMeetupTitle, setEditMeetupTitle] = useState("");
+  const [editMeetupContent, setEditMeetupContent] = useState("");
+  const [editMeetupCategory, setEditMeetupCategory] = useState("자유");
   const [selectedPost, setSelectedPost] = useState(null);
   const [editDescription, setEditDescription] = useState("");
   const [editMediaUrls, setEditMediaUrls] = useState([]);
@@ -61,6 +67,7 @@ export default function MyPage() {
     setBio(savedBio);
     loadRecords();
     loadMyPosts();
+    loadMyMeetups();
     loadClimbedDates();
     loadFollows();
     upsertProfile();
@@ -99,6 +106,44 @@ export default function MyPage() {
       .or(`user_id.eq.${user.id},and(user_id.is.null,user_name.eq.${myName})`)
       .order("created_at", { ascending: false });
     setMyPosts(data || []);
+  }
+
+  async function loadMyMeetups() {
+    const { data } = await supabase
+      .from("meetups")
+      .select("*")
+      .eq("meet_time", myName)
+      .order("created_at", { ascending: false });
+    setMyMeetups(data || []);
+  }
+
+  function openMeetupModal(meetup) {
+    setSelectedMeetup(meetup);
+    setEditMeetupTitle(meetup.gym || "");
+    setEditMeetupContent(meetup.description || "");
+    setEditMeetupCategory(meetup.activity || "자유");
+    setShowMeetupModal(true);
+  }
+
+  async function handleEditMeetup() {
+    if (!selectedMeetup || !editMeetupTitle.trim()) return;
+    const { error } = await supabase
+      .from("meetups")
+      .update({ gym: editMeetupTitle, description: editMeetupContent, activity: editMeetupCategory })
+      .eq("id", selectedMeetup.id);
+    if (error) { alert("수정 실패: " + error.message); return; }
+    setMyMeetups(prev => prev.map(m => m.id === selectedMeetup.id
+      ? { ...m, gym: editMeetupTitle, description: editMeetupContent, activity: editMeetupCategory }
+      : m));
+    setShowMeetupModal(false);
+  }
+
+  async function handleDeleteMeetup() {
+    if (!selectedMeetup) return;
+    const { error } = await supabase.from("meetups").delete().eq("id", selectedMeetup.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setMyMeetups(prev => prev.filter(m => m.id !== selectedMeetup.id));
+    setShowMeetupModal(false);
   }
 
   async function loadClimbedDates() {
@@ -360,6 +405,25 @@ export default function MyPage() {
         </div>
       )}
 
+      {/* 내 커뮤니티 글 */}
+      <p className="section-title">내 커뮤니티 글</p>
+      {myMeetups.length === 0 ? (
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "16px 0 20px", fontSize: 13 }}>
+          커뮤니티에 쓴 글이 여기 표시돼요
+        </div>
+      ) : (
+        myMeetups.map(m => (
+          <div key={m.id} className="community-card" onClick={() => openMeetupModal(m)} style={{ cursor: "pointer" }}>
+            <div className="community-card-top">
+              <span className="community-category-chip">{m.activity || "자유"}</span>
+              <span className="community-date">{new Date(m.created_at).toLocaleDateString("ko-KR")}</span>
+            </div>
+            <h3 className="community-title">{m.gym}</h3>
+            {m.description && <p className="community-content">{m.description}</p>}
+          </div>
+        ))
+      )}
+
       {/* 달력 */}
       <div className="calendar-section">
         <div className="calendar-nav">
@@ -412,7 +476,7 @@ export default function MyPage() {
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <input className="form-input" placeholder="예) 더클라임 강남 (7월까지)" value={memberInput}
                 onChange={e => setMemberInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && memberInput.trim()) { saveMemberships([...memberships, memberInput.trim()]); setMemberInput(""); } }} />
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing && memberInput.trim()) { saveMemberships([...memberships, memberInput.trim()]); setMemberInput(""); } }} />
               <button className="btn btn-primary" style={{ padding: "0 14px", flexShrink: 0 }}
                 onClick={() => { if (memberInput.trim()) { saveMemberships([...memberships, memberInput.trim()]); setMemberInput(""); } }}>추가</button>
             </div>
@@ -440,7 +504,7 @@ export default function MyPage() {
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <input className="form-input" placeholder="예) 더클라임 - 매주 화요일" value={settingInput}
                 onChange={e => setSettingInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && settingInput.trim()) { saveSettingDates([...settingDates, settingInput.trim()]); setSettingInput(""); } }} />
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing && settingInput.trim()) { saveSettingDates([...settingDates, settingInput.trim()]); setSettingInput(""); } }} />
               <button className="btn btn-primary" style={{ padding: "0 14px", flexShrink: 0 }}
                 onClick={() => { if (settingInput.trim()) { saveSettingDates([...settingDates, settingInput.trim()]); setSettingInput(""); } }}>추가</button>
             </div>
@@ -493,6 +557,42 @@ export default function MyPage() {
               )}
               <button className="btn btn-ghost" onClick={() => setShowCalModal(false)}>취소</button>
               <button className="btn btn-primary" onClick={handleCalRecord}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 커뮤니티 글 수정/삭제 모달 */}
+      {showMeetupModal && selectedMeetup && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowMeetupModal(false); }}>
+          <div className="modal-sheet">
+            <h3>💬 커뮤니티 글 관리</h3>
+            <div className="form-group">
+              <label>카테고리</label>
+              <div className="category-picker">
+                {["번개모임", "질문", "후기", "크루모집", "자유"].map(c => (
+                  <button key={c}
+                    className={`filter-chip${editMeetupCategory === c ? " active" : ""}`}
+                    onClick={() => setEditMeetupCategory(c)}>{c}</button>
+                ))}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>제목</label>
+              <input className="form-input" value={editMeetupTitle}
+                onChange={e => setEditMeetupTitle(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>내용</label>
+              <textarea className="form-input" rows={3} value={editMeetupContent}
+                onChange={e => setEditMeetupContent(e.target.value)}
+                style={{ resize: "none" }} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" style={{ color: "#ff5050", borderColor: "#ff5050" }}
+                onClick={handleDeleteMeetup}>삭제</button>
+              <button className="btn btn-ghost" onClick={() => setShowMeetupModal(false)}>취소</button>
+              <button className="btn btn-primary" onClick={handleEditMeetup}>수정 완료</button>
             </div>
           </div>
         </div>

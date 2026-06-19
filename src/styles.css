@@ -776,6 +776,10 @@ body {
   background: #555;
 }
 
+.story-ring.story-ring-viewed {
+  background: #555;
+}
+
 .story-avatar {
   width: 56px;
   height: 56px;

@@ -22,6 +22,7 @@ export default function Main() {
   const [mediaFiles, setMediaFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [avatarMap, setAvatarMap] = useState({});
+  const [viewedStories, setViewedStories] = useState(new Set());
   const fileInputRef = useRef(null);
   const commentSubmittingRef = useRef({});
 
@@ -38,6 +39,25 @@ export default function Main() {
       } catch {}
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user?.id) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(`viewedStories_${user.id}`) || "[]");
+        setViewedStories(new Set(saved));
+      } catch {}
+    }
+  }, [user?.id]);
+
+  function handleStoryClick(userName) {
+    setSelectedStory(userName);
+    if (user?.id) {
+      const newSet = new Set(viewedStories);
+      newSet.add(userName);
+      setViewedStories(newSet);
+      localStorage.setItem(`viewedStories_${user.id}`, JSON.stringify([...newSet]));
+    }
+  }
 
   // 내 프로필 사진 바뀌면 avatarMap에도 즉시 반영
   useEffect(() => {
@@ -160,8 +180,8 @@ export default function Main() {
       <div className="story-row">
         {allStories.map(u => (
           <div className="story-item" key={u.user_name}
-            onClick={() => setSelectedStory(u.user_name)}>
-            <div className={`story-ring${u.hasPosts ? "" : " story-ring-inactive"}`}>
+            onClick={() => handleStoryClick(u.user_name)}>
+            <div className={`story-ring${!u.hasPosts ? " story-ring-inactive" : !u.isMe && viewedStories.has(u.user_name) ? " story-ring-viewed" : ""}`}>
               {avatarMap[u.user_name] ? (
                 <img src={avatarMap[u.user_name]} alt="" className="story-avatar story-avatar-photo" />
               ) : (

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
-const CATEGORIES = ["번개모임", "질문", "후기", "자유"];
+const CATEGORIES = ["번개모임", "질문", "후기", "크루모집", "자유"];
 const FILTERS = ["전체", ...CATEGORIES];
 
 export default function Board() {
@@ -26,6 +26,7 @@ export default function Board() {
   const [editingReplyId, setEditingReplyId] = useState(null);
   const [editReplyContent, setEditReplyContent] = useState("");
   const submittingRef = useRef(false);
+  const postSubmittingRef = useRef(false);
 
   useEffect(() => {
     loadPosts();
@@ -149,18 +150,23 @@ export default function Board() {
   }
 
   async function handlePost() {
-    if (!form.title.trim()) return;
-    await supabase.from("meetups").insert({
-      gym: form.title,
-      activity: form.category,
-      description: form.content,
-      meet_time: myName,
-      max_participants: 0,
-      likes: 0,
-    });
-    setForm({ title: "", category: "자유", content: "" });
-    setShowModal(false);
-    loadPosts();
+    if (postSubmittingRef.current || !form.title.trim()) return;
+    postSubmittingRef.current = true;
+    try {
+      await supabase.from("meetups").insert({
+        gym: form.title,
+        activity: form.category,
+        description: form.content,
+        meet_time: myName,
+        max_participants: 0,
+        likes: 0,
+      });
+      setForm({ title: "", category: "자유", content: "" });
+      setShowModal(false);
+      loadPosts();
+    } finally {
+      postSubmittingRef.current = false;
+    }
   }
 
   async function handleDelete(id, e) {
