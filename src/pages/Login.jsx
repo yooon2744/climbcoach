@@ -1,8 +1,19 @@
+// ─────────────────────────────────────────────
+// Login.jsx
+// 로그인 / 회원가입 페이지.
+// Google OAuth 로그인과 이메일+비밀번호 로그인 두 가지를 지원한다.
+// 로그인 성공 시 App.jsx의 AppRoutes가 자동으로 메인 페이지로 전환한다.
+// ─────────────────────────────────────────────
+
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
+// OAuth 콜백 후 돌아올 URL (현재 도메인 루트)
 const REDIRECT_URL = window.location.origin;
 
+// Google 소셜 로그인 함수
+// prompt: "select_account" → 매번 구글 계정 선택창이 뜨게 해서
+// 여러 계정으로 테스트할 때 편리하다.
 async function signInWithSocial(provider) {
   await supabase.auth.signInWithOAuth({
     provider,
@@ -14,26 +25,31 @@ async function signInWithSocial(provider) {
 }
 
 export default function Login() {
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState("login");   // "login" | "signup" 탭 상태
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");         // 회원가입 시 닉네임
+  const [error, setError] = useState("");       // 오류 메시지
+  const [success, setSuccess] = useState("");   // 성공 메시지
+  const [loading, setLoading] = useState(false); // 버튼 로딩 상태
 
+  // 폼 제출 처리 (로그인 또는 회원가입)
   async function handleSubmit(e) {
-    e.preventDefault();
+    e.preventDefault(); // 기본 폼 submit(페이지 새로고침) 방지
     setError("");
     setSuccess("");
     setLoading(true);
 
     if (mode === "login") {
+      // 이메일 + 비밀번호 로그인
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError("이메일 또는 비밀번호가 틀렸어요.");
     } else {
+      // 회원가입 유효성 검사
       if (!name.trim()) { setError("닉네임을 입력해주세요."); setLoading(false); return; }
       if (password.length < 6) { setError("비밀번호는 6자 이상이어야 해요."); setLoading(false); return; }
+
+      // 회원가입 - data.name이 user_metadata.name으로 저장됨 (닉네임으로 사용)
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -48,12 +64,13 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
+        {/* 로고 및 슬로건 */}
         <div className="login-logo">
           <div className="login-logo-text">Climb<span>Coach</span></div>
           <p>실패해야 성장한다<br />클라이머들의 피드백 커뮤니티</p>
         </div>
 
-        {/* 소셜 로그인 */}
+        {/* 소셜 로그인 버튼 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
           <button className="social-btn social-google" onClick={() => signInWithSocial("google")}>
             <GoogleIcon />
@@ -63,6 +80,7 @@ export default function Login() {
 
         <div className="login-divider">또는 이메일로</div>
 
+        {/* 로그인 / 회원가입 탭 전환 */}
         <div className="login-tabs" style={{ marginTop: 16 }}>
           <button className={`login-tab${mode === "login" ? " active" : ""}`}
             onClick={() => { setMode("login"); setError(""); setSuccess(""); }}>로그인</button>
@@ -70,10 +88,13 @@ export default function Login() {
             onClick={() => { setMode("signup"); setError(""); setSuccess(""); }}>회원가입</button>
         </div>
 
+        {/* 오류 / 성공 메시지 */}
         {error && <div className="login-error">{error}</div>}
         {success && <div className="login-success">{success}</div>}
 
+        {/* 입력 폼 */}
         <form onSubmit={handleSubmit}>
+          {/* 회원가입 모드일 때만 닉네임 필드 표시 */}
           {mode === "signup" && (
             <div className="form-group">
               <label>닉네임</label>
@@ -102,6 +123,7 @@ export default function Login() {
   );
 }
 
+// Google 로고 SVG 아이콘 컴포넌트
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24">
