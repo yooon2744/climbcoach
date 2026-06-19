@@ -50,9 +50,12 @@ export default function MyPage() {
   const [userTag, setUserTag] = useState("");
   const [editingTag, setEditingTag] = useState(false);
   const [tagInput, setTagInput] = useState("");
-  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [myFollowingsList, setMyFollowingsList] = useState([]);
   const [pendingFollowers, setPendingFollowers] = useState([]);
+  const [followAvatarMap, setFollowAvatarMap] = useState({});
   const [showFriendModal, setShowFriendModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
   const [meetupsExpanded, setMeetupsExpanded] = useState(false);
   const [followRefreshKey, setFollowRefreshKey] = useState(0);
   const [selectedPost, setSelectedPost] = useState(null);
@@ -83,10 +86,10 @@ export default function MyPage() {
     upsertProfile();
   }, [user]);
 
-  // 클친 모달 열릴 때마다 + 수동 새로고침 시 팔로워 데이터 재로드
+  // 모달 열릴 때마다 + 수동 새로고침 시 팔로우 데이터 재로드
   useEffect(() => {
-    if (showFriendModal) loadFollows();
-  }, [showFriendModal, followRefreshKey]);
+    if (showFriendModal || showFollowingModal) loadFollows();
+  }, [showFriendModal, showFollowingModal, followRefreshKey]);
 
   // 탭 전환 후 돌아오면 팔로워 데이터 재로드
   useEffect(() => {
@@ -103,13 +106,28 @@ export default function MyPage() {
   }
 
   async function loadFollows() {
-    const [{ data: allFollowers }, { data: myFollowings }] = await Promise.all([
+    const [{ data: allFollowers }, { data: allMyFollowings }] = await Promise.all([
       supabase.from("follows").select("follower, status").eq("following", myName),
-      supabase.from("follows").select("following").eq("follower", myName).eq("status", "accepted"),
+      supabase.from("follows").select("following, status").eq("follower", myName),
     ]);
-    setFollowerCount((allFollowers || []).length);
-    setPendingFollowers((allFollowers || []).filter(f => f.status === "pending"));
-    setFriendCount((myFollowings || []).length);
+    const followingsList = allMyFollowings || [];
+    const followersList = allFollowers || [];
+    setFollowingCount(followingsList.length);
+    setMyFollowingsList(followingsList);
+    setFriendCount(followingsList.filter(f => f.status === "accepted").length);
+    setPendingFollowers(followersList.filter(f => f.status === "pending"));
+
+    // 목록에 표시할 아바타 로드
+    const names = [
+      ...followingsList.map(f => f.following),
+      ...followersList.filter(f => f.status === "pending").map(f => f.follower),
+    ].filter(Boolean);
+    if (names.length) {
+      const { data: profs } = await supabase.from("profiles").select("user_name, avatar_url").in("user_name", names);
+      const map = {};
+      profs?.forEach(p => { if (p.avatar_url) map[p.user_name] = p.avatar_url; });
+      setFollowAvatarMap(map);
+    }
   }
 
   async function loadRecords() {
@@ -403,9 +421,9 @@ export default function MyPage() {
         )}
 
         <div className="stats-row stats-row-4">
-          <div className="stat-item">
-            <span className="stat-val">{followerCount}</span>
-            <span className="stat-label">팔로워</span>
+          <div className="stat-item stat-clickable" onClick={() => setShowFollowingModal(true)}>
+            <span className="stat-val">{followingCount}</span>
+            <span className="stat-label">팔로잉</span>
           </div>
           <div className="stat-item stat-clickable" onClick={() => setShowFriendModal(true)}>
             <span className="stat-val" style={{ position: "relative" }}>
@@ -547,26 +565,80 @@ export default function MyPage() {
       </div>
 
       {/* 클친 신청 모달 */}
+      {/* 팔로잉 목록 모달 */}
+      {showFollowingModal && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowFollowingModal(false); }}>
+          <div className="modal-sheet">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>팔로잉 {followingCount}</h3>
+              <button onClick={() => setFollowRefreshKey(k => k + 1)}
+                style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>새로고침</button>
+            </div>
+            {myFollowingsList.length === 0 ? (
+              <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "12px 0 8px" }}>팔로우한 사람이 없어요</div>
+            ) : (
+              myFollowingsList.map(f => (
+                <div key={f.following} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                  {followAvatarMap[f.following] ? (
+                    <img src={followAvatarMap[f.following]} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🧗</div>
+                  )}
+                  <span style={{ fontWeight: 600, flex: 1 }}>{f.following}</span>
+                  <span style={{ fontSize: 11, color: f.status === "accepted" ? "var(--accent)" : "var(--text-muted)", fontWeight: 600 }}>
+                    {f.status === "accepted" ? "클친" : "신청중"}
+                  </span>
+                </div>
+              ))
+            )}
+            <div className="modal-actions" style={{ marginTop: 12 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowFollowingModal(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 클친 모달 (수락된 친구 + 신청 대기) */}
       {showFriendModal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowFriendModal(false); }}>
           <div className="modal-sheet">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>클친 신청 {pendingFollowers.length > 0 ? `(${pendingFollowers.length})` : ""}</h3>
+              <h3 style={{ margin: 0 }}>클친 {friendCount}</h3>
               <button onClick={() => setFollowRefreshKey(k => k + 1)}
-                style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
-                새로고침
-              </button>
+                style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>새로고침</button>
             </div>
-            {pendingFollowers.length === 0 ? (
-              <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "12px 0 8px" }}>새로운 클친 신청이 없어요</div>
+            {/* 수락된 클친 목록 */}
+            {myFollowingsList.filter(f => f.status === "accepted").length === 0 ? (
+              <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>아직 클친이 없어요</div>
             ) : (
-              pendingFollowers.map(f => (
-                <div key={f.follower} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ fontWeight: 600 }}>{f.follower}</span>
-                  <button className="btn btn-primary" style={{ padding: "5px 14px", fontSize: 13 }}
-                    onClick={() => handleAcceptFollow(f.follower)}>수락</button>
+              myFollowingsList.filter(f => f.status === "accepted").map(f => (
+                <div key={f.following} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                  {followAvatarMap[f.following] ? (
+                    <img src={followAvatarMap[f.following]} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🧗</div>
+                  )}
+                  <span style={{ fontWeight: 600 }}>{f.following}</span>
                 </div>
               ))
+            )}
+            {/* 신청 대기 */}
+            {pendingFollowers.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600, margin: "14px 0 4px" }}>클친 신청 ({pendingFollowers.length})</div>
+                {pendingFollowers.map(f => (
+                  <div key={f.follower} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                    {followAvatarMap[f.follower] ? (
+                      <img src={followAvatarMap[f.follower]} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🧗</div>
+                    )}
+                    <span style={{ fontWeight: 600, flex: 1 }}>{f.follower}</span>
+                    <button className="btn btn-primary" style={{ padding: "5px 14px", fontSize: 13 }}
+                      onClick={() => handleAcceptFollow(f.follower)}>수락</button>
+                  </div>
+                ))}
+              </>
             )}
             <div className="modal-actions" style={{ marginTop: 12 }}>
               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowFriendModal(false)}>닫기</button>
