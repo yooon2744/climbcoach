@@ -51,11 +51,15 @@ export function AuthProvider({ children }) {
     });
     if (upErr) throw upErr;
     const { data: { publicUrl } } = supabase.storage.from("Videos").getPublicUrl(fileName);
-    await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
     const myName = user.user_metadata?.name || user.email?.split("@")[0];
     if (myName) {
-      await supabase.from("profiles").upsert({ user_name: myName, avatar_url: publicUrl }, { onConflict: "user_name" });
+      const { error: dbErr } = await supabase.from("profiles").upsert(
+        { user_name: myName, avatar_url: publicUrl },
+        { onConflict: "user_name" }
+      );
+      if (dbErr) throw dbErr;
     }
+    setProfileImg(publicUrl); // useEffect 의존성 우회 - 업로드 즉시 UI 반영
   }
 
   async function updateNickname(newName) {
