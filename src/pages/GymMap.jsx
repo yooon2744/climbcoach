@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY;
-
 function searchKeyword(ps, kakao, keyword, allGymsMap, onDone) {
   function callback(data, status, pagination) {
     if (status === kakao.maps.services.Status.OK) {
@@ -28,75 +26,55 @@ export default function GymMap() {
   const mapRef = useRef(null);
   const [gymCount, setGymCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [selectedGym, setSelectedGym] = useState(null);
 
   useEffect(() => {
-    function initMap() {
-      const kakao = window.kakao;
-      const container = mapRef.current;
-      if (!container) return;
+    const kakao = window.kakao;
+    if (!kakao?.maps) return;
 
-      const map = new kakao.maps.Map(container, {
-        center: new kakao.maps.LatLng(37.5665, 126.9780),
-        level: 8,
-      });
+    const container = mapRef.current;
+    if (!container) return;
 
-      const ps = new kakao.maps.services.Places();
-      const allGyms = new Map();
-      const keywords = ["클라이밍 서울", "볼더링 서울"];
-      let completed = 0;
+    const map = new kakao.maps.Map(container, {
+      center: new kakao.maps.LatLng(37.5665, 126.9780),
+      level: 8,
+    });
 
-      function onAllDone() {
-        const list = Array.from(allGyms.values());
-        setGymCount(list.length);
-        setLoading(false);
+    const ps = new kakao.maps.services.Places();
+    const allGyms = new Map();
+    const keywords = ["클라이밍 서울", "볼더링 서울"];
+    let completed = 0;
 
-        const bounds = new kakao.maps.LatLngBounds();
-        list.forEach(place => {
-          const pos = new kakao.maps.LatLng(place.y, place.x);
-          bounds.extend(pos);
+    function onAllDone() {
+      const list = Array.from(allGyms.values());
+      setGymCount(list.length);
+      setLoading(false);
 
-          const markerImage = new kakao.maps.MarkerImage(
-            "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png",
-            new kakao.maps.Size(24, 35)
-          );
-          const marker = new kakao.maps.Marker({ map, position: pos, title: place.place_name, image: markerImage });
-          kakao.maps.event.addListener(marker, "click", () => {
-            setSelectedGym(place);
-            map.panTo(pos);
-          });
-        });
+      const bounds = new kakao.maps.LatLngBounds();
+      list.forEach(place => {
+        const pos = new kakao.maps.LatLng(place.y, place.x);
+        bounds.extend(pos);
 
-        if (list.length > 0) map.setBounds(bounds);
-      }
-
-      keywords.forEach(keyword => {
-        searchKeyword(ps, kakao, keyword, allGyms, () => {
-          completed++;
-          if (completed >= keywords.length) onAllDone();
+        const markerImage = new kakao.maps.MarkerImage(
+          "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png",
+          new kakao.maps.Size(24, 35)
+        );
+        const marker = new kakao.maps.Marker({ map, position: pos, title: place.place_name, image: markerImage });
+        kakao.maps.event.addListener(marker, "click", () => {
+          setSelectedGym(place);
+          map.panTo(pos);
         });
       });
+
+      if (list.length > 0) map.setBounds(bounds);
     }
 
-    // 이미 완전히 초기화된 경우
-    if (window.kakao?.maps?.Map) {
-      initMap();
-      return;
-    }
-
-    // 스크립트는 로드됐지만 maps.load() 아직 안 된 경우
-    if (window.kakao?.maps) {
-      window.kakao.maps.load(initMap);
-      return;
-    }
-
-    // 스크립트 새로 로드
-    const script = document.createElement("script");
-    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&libraries=services&autoload=false`;
-    script.onload = () => window.kakao.maps.load(initMap);
-    script.onerror = () => { setLoading(false); setError(true); };
-    document.head.appendChild(script);
+    keywords.forEach(keyword => {
+      searchKeyword(ps, kakao, keyword, allGyms, () => {
+        completed++;
+        if (completed >= keywords.length) onAllDone();
+      });
+    });
   }, []);
 
   return (
@@ -109,7 +87,7 @@ export default function GymMap() {
         color: loading ? "var(--text-muted)" : "var(--text)",
         border: "1px solid var(--border)", whiteSpace: "nowrap", fontWeight: 500,
       }}>
-        {error ? "❌ 지도를 불러올 수 없어요" : loading ? "🔍 암장 불러오는 중..." : `🧗 서울 클라이밍 ${gymCount}곳`}
+        {loading ? "🔍 암장 불러오는 중..." : `🧗 서울 클라이밍 ${gymCount}곳`}
       </div>
 
       <div ref={mapRef} style={{ flex: 1, width: "100%" }} />
