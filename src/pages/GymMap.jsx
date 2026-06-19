@@ -14,6 +14,9 @@ import { useEffect, useRef, useState } from "react";
 // 카카오맵 장소 API 키워드 검색 헬퍼 함수.
 // 페이지네이션이 있으면 재귀적으로 다음 페이지를 가져온다.
 // allGymsMap: Map(id → place) — 중복 암장을 id 기준으로 제거
+//
+// ※ 키워드에 "서울"을 포함하면 location+radius와 충돌해 ZERO_RESULT가 되므로
+//    지역명 없이 순수 업종명만 사용한다.
 function searchKeyword(ps, kakao, keyword, allGymsMap, onDone) {
   function callback(data, status, pagination) {
     if (status === kakao.maps.services.Status.OK) {
@@ -27,15 +30,21 @@ function searchKeyword(ps, kakao, keyword, allGymsMap, onDone) {
       } else {
         onDone(); // 이 키워드 검색 완료
       }
+    } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+      // 결과 없음 (정상 완료)
+      onDone();
     } else {
-      onDone(); // 결과 없어도 완료 처리 (에러 무시)
+      // ERROR: API 키 도메인 미등록 등 설정 문제일 가능성이 높음
+      console.error(`[GymMap] Kakao Places 검색 실패 — keyword: "${keyword}", status: ${status}`);
+      onDone();
     }
   }
 
   ps.keywordSearch(keyword, callback, {
     location: new kakao.maps.LatLng(37.5665, 126.9780), // 서울 중심 좌표
-    radius: 30000, // 30km 반경
+    radius: 40000, // 40km 반경 (30km에서 확대)
     size: 15,      // 한 페이지에 최대 15개
+    sort: kakao.maps.services.SortBy.ACCURACY, // 정확도 순 정렬
   });
 }
 
@@ -60,8 +69,10 @@ export default function GymMap() {
 
       const ps = new kakao.maps.services.Places();
       const allGyms = new Map(); // id를 키로 중복 제거
-      const keywords = ["클라이밍 서울", "볼더링 서울"];
-      let completed = 0; // 완료된 키워드 수 (2개 모두 끝나면 마커 생성)
+      // location+radius를 설정했으므로 키워드에 "서울" 포함 금지
+      // → 포함하면 Kakao 검색이 지역명과 location을 동시에 적용해 ZERO_RESULT 반환
+      const keywords = ["클라이밍", "볼더링", "암벽등반"];
+      let completed = 0; // 완료된 키워드 수 (모두 끝나면 마커 생성)
 
       // 모든 키워드 검색이 완료됐을 때 호출
       function onAllDone() {
@@ -92,11 +103,11 @@ export default function GymMap() {
         if (list.length > 0) map.setBounds(bounds); // 마커 전체가 보이도록 줌 자동 조정
       }
 
-      // 두 키워드 검색을 병렬로 실행
+      // 키워드 검색을 병렬로 실행
       keywords.forEach(keyword => {
         searchKeyword(ps, kakao, keyword, allGyms, () => {
           completed++;
-          if (completed >= keywords.length) onAllDone(); // 둘 다 끝나면 마커 생성
+          if (completed >= keywords.length) onAllDone(); // 모두 끝나면 마커 생성
         });
       });
     }
@@ -131,7 +142,12 @@ export default function GymMap() {
         color: loading ? "var(--text-muted)" : "var(--text)",
         border: "1px solid var(--border)", whiteSpace: "nowrap", fontWeight: 500,
       }}>
-        {loading ? "🔍 암장 불러오는 중..." : `🧗 서울 클라이밍 ${gymCount}곳`}
+        {loading
+        ? "🔍 암장 불러오는 중..."
+        : gymCount > 0
+          ? `🧗 서울 클라이밍 ${gymCount}곳`
+          : "⚠️ 결과 없음 — 카카오 콘솔에서 도메인을 확인해주세요"
+      }
       </div>
 
       {/* 카카오맵이 그려지는 div (mapRef로 연결) */}
