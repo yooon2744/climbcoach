@@ -29,20 +29,17 @@ export function AuthProvider({ children }) {
   // file: File 객체 - Supabase Storage에 업로드 후 profiles 테이블에 URL 저장
   async function updateProfileImg(file) {
     if (!user?.id || !file) return;
-    const fileName = `avatars/avatar_${user.id}`;
+    const ext = (file.name || "").split(".").pop() || "jpg";
+    const fileName = `avatar_${user.id}_${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("Videos").upload(fileName, file, {
       contentType: file.type,
-      upsert: true,
     });
     if (upErr) throw upErr;
     const { data: { publicUrl } } = supabase.storage.from("Videos").getPublicUrl(fileName);
-    const url = `${publicUrl}?t=${Date.now()}`;
-    // auth metadata에 저장 → onAuthStateChange → user 갱신 → profileImg 갱신
-    await supabase.auth.updateUser({ data: { avatar_url: url } });
-    // profiles 테이블에도 저장 (다른 유저들이 볼 수 있게)
+    await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
     const myName = user.user_metadata?.name || user.email?.split("@")[0];
     if (myName) {
-      await supabase.from("profiles").upsert({ user_name: myName, avatar_url: url }, { onConflict: "user_name" });
+      await supabase.from("profiles").upsert({ user_name: myName, avatar_url: publicUrl }, { onConflict: "user_name" });
     }
   }
 
